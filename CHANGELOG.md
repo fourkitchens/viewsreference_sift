@@ -7,6 +7,7 @@
 - Requires Drupal 11.3 or later; Drupal 10 is no longer supported.
 - Requires PHP 8.3 or later.
 - Requires Views Reference 2.0.0-beta14 or later.
+- Added type information to the Terms setting and kernel test helpers.
 
 ### Added
 
