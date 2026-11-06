@@ -18,6 +18,8 @@
 - Added selection value objects and normalization for saved term settings.
 - Extracted construction of Views arguments from term selections.
 - Rewired the Terms setting to resolve filters and normalize widget submissions.
+- Stores selections in a versioned format; values saved by 1.0.0-beta1 keep
+  working.
 
 ### Added
 
