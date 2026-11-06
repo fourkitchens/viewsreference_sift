@@ -3,6 +3,7 @@
 namespace Drupal\viewsreference_sift\Plugin\ViewsReferenceSetting;
 
 use Drupal\Component\Plugin\PluginBase;
+use Drupal\Core\Cache\Cache;
 use Drupal\Core\Entity\Element\EntityAutocomplete;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Form\FormStateInterface;
@@ -135,6 +136,10 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
     $value = $this->valueSource->resolve($view, $value);
     $selection = $this->selectionNormalizer->fromStorage($value, $filters);
     $selection = $this->selectionValidator->validate($selection, $filters);
+    foreach ($selection->filters as $id => $selected) {
+      $tags = Cache::buildTags($filters[$id]->entityTypeId, $selected->ids);
+      $view->element['#cache']['tags'] = Cache::mergeTags($view->element['#cache']['tags'] ?? [], $tags);
+    }
     $arguments = $this->argumentBuilder->build($filters, $selection, $view->args);
     if ($arguments !== $view->args) {
       $view->setArguments($arguments);
