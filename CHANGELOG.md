@@ -9,6 +9,17 @@ Views Reference Sift follows [Semantic Versioning][semver].
 
 - Adds a Drupal Help page with field and display setup instructions.
 
+### Changed
+
+- Clarifies which Sift values come from the field or browser and why
+  contextual filters must never control access.
+
+### Security
+
+- Removes the Views AJAX parent entity lookup to prevent visitors from
+  inferring saved selections on unpublished content, draft revisions, or
+  private entities.
+
 ## [1.0.0-beta3] - 2026-11-06
 
 ### Fixed

@@ -191,8 +191,7 @@ display:
   validation, Views uses its configured failure action. If the Sift bundle
   list is narrower and no IDs qualify, Sift skips the selection.
 - **The selection disappears while paging.** Enable **Use AJAX** on the View
-  display. Sift keeps the saved selections when Views reloads the results
-  through AJAX.
+  display. Sift carries the current selection through AJAX paging.
 
 
 ## FAQ
@@ -205,10 +204,19 @@ if the View provides them.
 Reference field on the block content or paragraph entity. The same setup
 works on other entities that have a Views Reference field.
 
-**Does Sift trust values from URLs?** Sift ignores those values on ordinary
-page requests. On Views AJAX requests it prefers the saved field selection.
-When it cannot load that selection, it checks the supplied IDs against the
-filter and applies its selection limit.
+**Does Sift trust values from URLs?** On normal page requests, Sift uses only
+the selection saved on the field and ignores Sift values in the query string.
+
+On Views AJAX requests, the values come from the browser. Sift caps the
+selection and checks that IDs exist and belong to allowed bundles. Visitors
+can change the values. Drupal core already lets visitors change contextual
+filter values on AJAX-enabled displays. Never use contextual filters,
+including Sift's, for access control.
+
+Views Reference applies `?viewsreference[...]` overrides on every request, so
+visitors can turn off Sift for their own page view. Drupal core varies the
+cache by URL for displays with contextual filters, so the override is confined
+to requests for that URL.
 
 **Is this project on Drupal.org?** Not yet. The code, issue queue, and
 releases are on GitHub. [Packagist][packagist] is the Composer package page.
