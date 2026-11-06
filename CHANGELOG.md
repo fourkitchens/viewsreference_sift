@@ -16,6 +16,8 @@ Views Reference Sift follows [Semantic Versioning][semver].
 
 - Preserves a contextual filter's configured action when its value is
   missing and a later filter has a Sift selection.
+- Uses singular wording in the validation error when a Sift filter allows
+  at most one item.
 
 ### Changed
 

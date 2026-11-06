@@ -26,6 +26,7 @@ use Drupal\views\Views;
 use Drupal\viewsreference_sift\Filter\FilterResolver;
 use Drupal\viewsreference_sift\Filter\SiftFilter;
 use Drupal\viewsreference_sift\Plugin\views\display_extender\SiftDisplayExtender;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 use Symfony\Component\HttpFoundation\Request;
@@ -389,22 +390,31 @@ class SiftTermsTest extends KernelTestBase {
 
   /**
    * Tests required and maximum selection errors on the editor's field.
+   *
+   * @param int $maximum
+   *   The configured maximum number of selections.
+   * @param string $limit_message
+   *   The expected error for too many selections.
    */
-  public function testDisplaySelectionValidation(): void {
-    $this->saveTermOptions(['label' => 'Topics', 'widget' => 'checkboxes', 'max' => 2, 'required' => TRUE]);
+  #[DataProvider('maximumSelectionMessages')]
+  public function testDisplaySelectionValidation(int $maximum, string $limit_message): void {
+    $this->saveTermOptions(['label' => 'Topics', 'widget' => 'checkboxes', 'max' => $maximum, 'required' => TRUE]);
     $field = $this->termsElement('embed_terms');
     $field['#parents'] = ['field_listing', 0, 'options', 'sift_terms'];
     $widget_parents = [...$field['#parents'], 'filters', 'tid', 'ids'];
     $field['filters']['tid']['ids']['#parents'] = $widget_parents;
     $callback = $field['#element_validate'][0];
     $this->assertIsCallable($callback);
-    $extra = Term::create(['vid' => 'tags', 'name' => 'Extra topic']);
-    $extra->save();
-    $ids = [$this->termIds['A'], $this->termIds['B'], (int) $extra->id()];
+    $ids = [$this->termIds['A'], $this->termIds['B']];
+    for ($index = count($ids); $index <= $maximum; $index++) {
+      $extra = Term::create(['vid' => 'tags', 'name' => 'Extra topic ' . $index]);
+      $extra->save();
+      $ids[] = (int) $extra->id();
+    }
 
     foreach ([
       [[], 'Choose at least one item for Topics.'],
-      [array_combine($ids, $ids), 'Choose at most 2 items for Topics.'],
+      [array_combine($ids, $ids), $limit_message],
     ] as [$values, $expected]) {
       $form_state = new FormState();
       $form_state->setValue(['field_listing', 0, 'display_id'], 'embed_terms');
@@ -413,6 +423,17 @@ class SiftTermsTest extends KernelTestBase {
       $this->assertSame([implode('][', $widget_parents) => $expected], array_map('strval', $form_state->getErrors()));
       $form_state->clearErrors();
     }
+  }
+
+  /**
+   * Provides selection limits with singular and plural messages.
+   *
+   * @return iterable<string, array{int, string}>
+   *   The configured maximum and expected error message.
+   */
+  public static function maximumSelectionMessages(): iterable {
+    yield 'singular' => [1, 'Choose at most 1 item for Topics.'];
+    yield 'plural' => [3, 'Choose at most 3 items for Topics.'];
   }
 
   /**
