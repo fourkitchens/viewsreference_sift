@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Drupal\Tests\viewsreference_sift\Kernel;
 
 use Drupal\Core\Field\FieldStorageDefinitionInterface;
+use Drupal\Core\Form\FormState;
 use Drupal\KernelTests\KernelTestBase;
 use Drupal\node\Entity\Node;
 use Drupal\node\Entity\NodeType;
@@ -89,17 +90,17 @@ class SiftTermsTest extends KernelTestBase {
    * Tests the contextual filter and the Views Reference request payload.
    */
   public function testTermArguments(): void {
-    $terms = [['target_id' => $this->termIds['A']], ['target_id' => $this->termIds['B']]];
-    $any = ['terms' => $terms, 'match' => 'any'];
-    $all = ['terms' => $terms, 'match' => 'all'];
+    $ids = [$this->termIds['A'], $this->termIds['B']];
+    $any = $this->storedSelection('tid', $ids);
+    $all = $this->storedSelection('tid', $ids, 'all');
 
     $this->assertResultTitles(['A', 'B', 'Both'], $this->executeWithSetting('embed_terms', $any));
     $this->assertResultTitles(['A', 'B', 'Both'], $this->executeWithSetting('embed_terms', $any, TRUE));
     $this->assertResultTitles(['Both'], $this->executeWithSetting('embed_terms', $all));
-    $this->assertResultTitles(['A', 'B', 'Both', 'Neither'], $this->executeWithSetting('embed_terms', ['terms' => []]));
+    $this->assertResultTitles(['A', 'B', 'Both', 'Neither'], $this->executeWithSetting('embed_terms', $this->storedSelection('tid', [])));
     $this->assertResultTitles(['A', 'B', 'Both', 'Neither'], $this->executeWithSetting('embed_terms', 'legacy'));
 
-    $depth = $this->executeWithSetting('embed_depth', $all);
+    $depth = $this->executeWithSetting('embed_depth', $this->storedSelection('term_node_tid_depth', $ids, 'all'));
     $this->assertResultTitles(['A', 'B', 'Both'], $depth);
     $this->assertSame([implode('+', [$this->termIds['A'], $this->termIds['B']])], $depth->args);
 
@@ -107,12 +108,10 @@ class SiftTermsTest extends KernelTestBase {
     $this->assertResultTitles(['A', 'B', 'Both', 'Neither'], $plain);
     $this->assertSame([], $plain->args);
 
-    $malformed = [
-      'terms' => [
-        ['target_id' => (string) $this->termIds['A']],
-        ['target_id' => $this->termIds['B'] . '+' . $this->termIds['C']],
-      ],
-    ];
+    $malformed = $this->storedSelection('tid', [
+      (string) $this->termIds['A'],
+      $this->termIds['B'] . '+' . $this->termIds['C'],
+    ]);
     $this->assertResultTitles(['A', 'Both'], $this->executeWithSetting('embed_terms', $malformed, TRUE));
   }
 
@@ -138,7 +137,7 @@ class SiftTermsTest extends KernelTestBase {
     $view->storage->save();
 
     $this->assertFalse($this->termsElement('embed_terms')['#access']);
-    $view = $this->executeWithSetting('embed_terms', ['terms' => [['target_id' => $this->termIds['A']]]]);
+    $view = $this->executeWithSetting('embed_terms', $this->storedSelection('tid', [$this->termIds['A']]));
     $this->assertSame([], $view->args);
     $this->assertResultTitles(['A', 'B', 'Both', 'Neither'], $view);
   }
@@ -156,26 +155,90 @@ class SiftTermsTest extends KernelTestBase {
     $this->assertSame(5, $field['#weight']);
     $this->assertSame(['visible' => []], $field['#states']);
     $this->assertArrayNotHasKey('#default_value', $field);
-    $this->assertSame('entity_autocomplete', $field['terms']['#type']);
-    $this->assertSame('taxonomy_term', $field['terms']['#target_type']);
-    $this->assertTrue($field['terms']['#tags']);
-    $this->assertSame(['tags'], array_values($field['terms']['#selection_settings']['target_bundles']));
-    $this->assertSame('radios', $field['match']['#type']);
-    $this->assertSame(['any', 'all'], array_keys($field['match']['#options']));
-    $this->assertSame('any', $field['match']['#default_value']);
+    $this->assertSame(['#type' => 'value', '#value' => 2], $field['version']);
+    $filter = $field['filters']['tid'];
+    $this->assertSame('entity_autocomplete', $filter['ids']['#type']);
+    $this->assertSame('taxonomy_term', $filter['ids']['#target_type']);
+    $this->assertTrue($filter['ids']['#tags']);
+    $this->assertSame(['tags'], array_values($filter['ids']['#selection_settings']['target_bundles']));
+    $this->assertSame('radios', $filter['match']['#type']);
+    $this->assertSame(['any', 'all'], array_keys($filter['match']['#options']));
+    $this->assertSame('any', $filter['match']['#default_value']);
 
     $depth = $this->termsElement('embed_depth');
-    $this->assertArrayNotHasKey('match', $depth);
+    $this->assertArrayNotHasKey('match', $depth['filters']['term_node_tid_depth']);
 
     Term::load($this->termIds['B'])->delete();
-    $field = $this->termsElement('embed_terms', [
-      'terms' => [['target_id' => $this->termIds['B']], ['target_id' => $this->termIds['A']]],
-      'match' => 'all',
-    ]);
-    $defaults = array_values($field['terms']['#default_value']);
+    $stored = $this->storedSelection('tid', [$this->termIds['B'], $this->termIds['A']], 'all');
+    $field = $this->termsElement('embed_terms', $stored);
+    $filter = $field['filters']['tid'];
+    $defaults = array_values($filter['ids']['#default_value']);
     $this->assertCount(1, $defaults);
     $this->assertSame($this->termIds['A'], (int) $defaults[0]->id());
-    $this->assertSame('all', $field['match']['#default_value']);
+    $this->assertSame('all', $filter['match']['#default_value']);
+  }
+
+  /**
+   * Tests that saved beta1 values still filter and populate the widget.
+   */
+  public function testLegacyValue(): void {
+    $legacy = [
+      'terms' => [['target_id' => (string) $this->termIds['A']], ['target_id' => $this->termIds['B']]],
+      'match' => 'all',
+    ];
+    $this->assertResultTitles(['Both'], $this->executeWithSetting('embed_terms', $legacy));
+    $this->assertResultTitles(['Both'], $this->executeWithSetting('embed_terms', $legacy, TRUE));
+
+    $field = $this->termsElement('embed_terms', $legacy, 'viewsreference_sift_test');
+    $filter = $field['filters']['tid'];
+    $defaults = $filter['ids']['#default_value'];
+    $this->assertCount(2, $defaults);
+    $this->assertSame($this->termIds['A'], (int) $defaults[0]->id());
+    $this->assertSame($this->termIds['B'], (int) $defaults[1]->id());
+    $this->assertSame('all', $filter['match']['#default_value']);
+  }
+
+  /**
+   * Tests that widget validation writes versioned settings for storage.
+   */
+  public function testWidgetValidation(): void {
+    $field = $this->termsElement('embed_terms');
+    $field['#parents'] = ['field_listing', 0, 'options', 'sift_terms'];
+    $form_state = new FormState();
+    $form_state->setValue($field['#parents'], [
+      'version' => 2,
+      'filters' => [
+        'tid' => [
+          'ids' => [
+            ['target_id' => (string) $this->termIds['B']],
+            ['target_id' => $this->termIds['A']],
+            ['target_id' => $this->termIds['B']],
+          ],
+          'match' => 'all',
+        ],
+      ],
+    ]);
+
+    $callback = $field['#element_validate'][0];
+    $this->assertIsCallable($callback);
+    $callback($field, $form_state);
+    $this->assertSame(
+      $this->storedSelection('tid', [$this->termIds['B'], $this->termIds['A']], 'all'),
+      $form_state->getValue($field['#parents']),
+    );
+  }
+
+  /**
+   * Builds a stored version 2 selection for one filter.
+   *
+   * @phpstan-param list<int|string> $ids
+   * @phpstan-return array{version: 2, filters: array<string, array{ids: list<int|string>, match: string}>}
+   */
+  protected function storedSelection(string $id, array $ids, string $match = 'any'): array {
+    return [
+      'version' => 2,
+      'filters' => [$id => ['ids' => $ids, 'match' => $match]],
+    ];
   }
 
   /**

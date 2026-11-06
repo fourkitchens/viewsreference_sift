@@ -3,12 +3,18 @@
 namespace Drupal\viewsreference_sift\Plugin\ViewsReferenceSetting;
 
 use Drupal\Component\Plugin\PluginBase;
+use Drupal\Core\Entity\Element\EntityAutocomplete;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
+use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Plugin\ContainerFactoryPluginInterface;
 use Drupal\Core\StringTranslation\StringTranslationTrait;
 use Drupal\views\ViewExecutable;
-use Drupal\views\Views;
 use Drupal\viewsreference\Plugin\ViewsReferenceSettingInterface;
+use Drupal\viewsreference_sift\Argument\ArgumentBuilder;
+use Drupal\viewsreference_sift\Filter\FilterResolver;
+use Drupal\viewsreference_sift\Selection\MatchMode;
+use Drupal\viewsreference_sift\Selection\Selection;
+use Drupal\viewsreference_sift\Selection\SelectionNormalizer;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
@@ -19,10 +25,8 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
  *   label = @Translation("Terms"),
  *   default_value = "",
  * )
- *
- * @phpstan-consistent-constructor
  */
-class ViewsReferenceSiftTerms extends PluginBase implements ViewsReferenceSettingInterface, ContainerFactoryPluginInterface {
+final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReferenceSettingInterface, ContainerFactoryPluginInterface {
 
   use StringTranslationTrait;
 
@@ -35,7 +39,10 @@ class ViewsReferenceSiftTerms extends PluginBase implements ViewsReferenceSettin
     array $configuration,
     $plugin_id,
     $plugin_definition,
-    protected EntityTypeManagerInterface $entityTypeManager,
+    private readonly EntityTypeManagerInterface $entityTypeManager,
+    private readonly FilterResolver $filterResolver,
+    private readonly SelectionNormalizer $selectionNormalizer,
+    private readonly ArgumentBuilder $argumentBuilder,
   ) {
     parent::__construct($configuration, $plugin_id, $plugin_definition);
   }
@@ -46,35 +53,15 @@ class ViewsReferenceSiftTerms extends PluginBase implements ViewsReferenceSettin
    * @phpstan-param array<string, mixed> $configuration
    */
   public static function create(ContainerInterface $container, array $configuration, $plugin_id, $plugin_definition): static {
-    return new static(
+    return new self(
       $configuration,
       $plugin_id,
       $plugin_definition,
       $container->get('entity_type.manager'),
+      $container->get(FilterResolver::class),
+      $container->get(SelectionNormalizer::class),
+      $container->get(ArgumentBuilder::class),
     );
-  }
-
-  /**
-   * Gets a display's first contextual filter if it accepts taxonomy term IDs.
-   *
-   * @phpstan-return array<string, mixed>|null
-   */
-  protected function firstTermArgument(string $view_id, string $display_id): ?array {
-    $view = Views::getView($view_id);
-    return $view && $view->setDisplay($display_id) ? $this->getFirstTermArgument($view) : NULL;
-  }
-
-  /**
-   * Checks the active display's first contextual filter.
-   *
-   * @phpstan-return array<string, mixed>|null
-   */
-  private function getFirstTermArgument(ViewExecutable $view): ?array {
-    /** @var \Drupal\views\Plugin\views\display\DisplayPluginBase|null $display */
-    $display = $view->display_handler;
-    $arguments = $display?->getOption('arguments') ?? [];
-    $argument = reset($arguments);
-    return in_array($argument['plugin_id'] ?? NULL, ['taxonomy_index_tid', 'taxonomy_index_tid_depth'], TRUE) ? $argument : NULL;
   }
 
   /**
@@ -83,48 +70,50 @@ class ViewsReferenceSiftTerms extends PluginBase implements ViewsReferenceSettin
    * @phpstan-param array<string, mixed> $form_field
    */
   public function alterFormField(array &$form_field): void {
-    $name_parts = explode('(', $this->configuration['view_name'] ?? '');
-    $view_id = rtrim(array_pop($name_parts), ')');
-    $display_id = $this->configuration['display_id'] ?? '';
-    $argument = $view_id !== '' && $display_id !== '' ? $this->firstTermArgument($view_id, $display_id) : NULL;
-    if (!$argument) {
+    $view_name = $this->configuration['view_name'] ?? '';
+    $view_id = EntityAutocomplete::extractEntityIdFromAutocompleteInput($view_name) ?? $view_name;
+    $filters = $this->filterResolver->forDisplay($view_id, $this->configuration['display_id'] ?? '');
+    $filter = reset($filters);
+    if (!$filter) {
       $form_field['#access'] = FALSE;
       return;
     }
 
-    $value = $form_field['#default_value'] ?? '';
-    $term_ids = $this->termIds($value);
+    $selection = $this->selectionNormalizer->fromStorage($form_field['#default_value'] ?? '', $filters);
+    $selected = $selection->filters[$filter->id] ?? NULL;
+    $ids = $selected->ids ?? [];
     $form_field['#type'] = 'fieldset';
     $form_field['#title'] = $this->t('Terms');
     $form_field['#tree'] = TRUE;
-    $form_field['terms'] = [
-      '#type' => 'entity_autocomplete',
-      '#target_type' => 'taxonomy_term',
-      '#tags' => TRUE,
-      '#title' => $this->t('Show only content with these terms'),
-      '#default_value' => $term_ids ? array_values($this->entityTypeManager->getStorage('taxonomy_term')->loadMultiple($term_ids)) : [],
-    ];
+    $form_field['#sift_filters'] = $filters;
+    $form_field['#element_validate'][] = [self::class, 'validateSelection'];
+    $form_field['version'] = ['#type' => 'value', '#value' => Selection::VERSION];
     unset($form_field['#default_value']);
 
-    if (($argument['validate']['type'] ?? NULL) === 'entity:taxonomy_term') {
-      $bundles = array_filter($argument['validate_options']['bundles'] ?? []);
-      if ($bundles) {
-        $form_field['terms']['#selection_settings']['target_bundles'] = $bundles;
-      }
+    $widget = [
+      '#type' => 'entity_autocomplete',
+      '#target_type' => $filter->entityTypeId,
+      '#tags' => TRUE,
+      '#title' => $this->t('Show only content with these terms'),
+      '#default_value' => $ids ? array_values($this->entityTypeManager->getStorage($filter->entityTypeId)->loadMultiple($ids)) : [],
+    ];
+    if ($filter->bundles) {
+      $widget['#selection_settings']['target_bundles'] = $filter->bundles;
     }
+    $form_field['filters'][$filter->id]['ids'] = $widget;
 
-    if ($argument['plugin_id'] === 'taxonomy_index_tid') {
-      $form_field['match'] = [
+    if ($filter->supportsAll) {
+      $form_field['filters'][$filter->id]['match'] = [
         '#type' => 'radios',
         '#title' => $this->t('Match'),
         '#options' => [
-          'any' => $this->t('Any of these terms'),
-          'all' => $this->t('All of these terms'),
+          MatchMode::Any->value => $this->t('Any of these terms'),
+          MatchMode::All->value => $this->t('All of these terms'),
         ],
-        '#default_value' => ($value['match'] ?? NULL) === 'all' ? 'all' : 'any',
+        '#default_value' => ($selected->match ?? MatchMode::Any)->value,
       ];
     }
-    else {
+    elseif ($filter->pluginId === 'taxonomy_index_tid_depth') {
       $form_field['#description'] = $this->t('Matches any selected term. A positive depth also includes child terms.');
     }
   }
@@ -133,36 +122,38 @@ class ViewsReferenceSiftTerms extends PluginBase implements ViewsReferenceSettin
    * {@inheritdoc}
    */
   public function alterView(ViewExecutable $view, $value): void {
-    $term_ids = $this->termIds($value);
-    if (!$term_ids || !($argument = $this->getFirstTermArgument($view))) {
-      return;
+    $filters = $this->filterResolver->forView($view);
+    $selection = $this->selectionNormalizer->fromStorage($value, $filters);
+    $arguments = $this->argumentBuilder->build($filters, $selection, $view->args);
+    if ($arguments !== $view->args) {
+      $view->setArguments($arguments);
     }
-
-    $match_all = ($value['match'] ?? NULL) === 'all' && $argument['plugin_id'] === 'taxonomy_index_tid';
-    $view->setArguments([implode($match_all ? ',' : '+', $term_ids)]);
   }
 
   /**
-   * Extracts valid term IDs from setting data that can come from an AJAX URL.
+   * Converts validated autocomplete values into the stored selection shape.
    *
-   * @phpstan-return list<int>
+   * @phpstan-param array<string, mixed> $element
    */
-  private function termIds(mixed $value): array {
-    if (!is_array($value) || !is_array($value['terms'] ?? NULL)) {
-      return [];
+  public static function validateSelection(array $element, FormStateInterface $form_state): void {
+    /** @var array<string, \Drupal\viewsreference_sift\Filter\SiftFilter> $filters */
+    $filters = $element['#sift_filters'];
+    $submitted = $form_state->getValue([...$element['#parents'], 'filters'], []);
+    $values = [];
+    foreach (is_array($submitted) ? $submitted : [] as $id => $value) {
+      $filter = $filters[$id] ?? NULL;
+      if (!$filter || !is_array($value) || !is_array($value['ids'] ?? NULL)) {
+        continue;
+      }
+      $values[$id] = [
+        'ids' => array_map(static fn (mixed $item): mixed => is_array($item) ? ($item['target_id'] ?? NULL) : $item, $value['ids']),
+        'match' => $filter->supportsAll ? ($value['match'] ?? NULL) : NULL,
+      ];
     }
 
-    $term_ids = [];
-    foreach ($value['terms'] as $term) {
-      $target_id = is_array($term) ? ($term['target_id'] ?? NULL) : NULL;
-      if (is_int($target_id) || is_string($target_id)) {
-        $term_id = filter_var($target_id, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
-        if ($term_id !== FALSE) {
-          $term_ids[$term_id] = $term_id;
-        }
-      }
-    }
-    return array_values($term_ids);
+    $normalizer = \Drupal::service(SelectionNormalizer::class);
+    $selection = $normalizer->fromStorage(['version' => Selection::VERSION, 'filters' => $values], $filters);
+    $form_state->setValueForElement($element, $normalizer->toStorage($selection));
   }
 
 }
