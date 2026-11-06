@@ -3,6 +3,7 @@
 namespace Drupal\viewsreference_sift\Plugin\ViewsReferenceSetting;
 
 use Drupal\Component\Plugin\PluginBase;
+use Drupal\Core\Cache\Cache;
 use Drupal\Core\Entity\Element\EntityAutocomplete;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Form\FormStateInterface;
@@ -15,6 +16,8 @@ use Drupal\viewsreference_sift\Filter\FilterResolver;
 use Drupal\viewsreference_sift\Selection\MatchMode;
 use Drupal\viewsreference_sift\Selection\Selection;
 use Drupal\viewsreference_sift\Selection\SelectionNormalizer;
+use Drupal\viewsreference_sift\Selection\SelectionValidator;
+use Drupal\viewsreference_sift\Selection\ValueSource;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
@@ -42,6 +45,8 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
     private readonly EntityTypeManagerInterface $entityTypeManager,
     private readonly FilterResolver $filterResolver,
     private readonly SelectionNormalizer $selectionNormalizer,
+    private readonly SelectionValidator $selectionValidator,
+    private readonly ValueSource $valueSource,
     private readonly ArgumentBuilder $argumentBuilder,
   ) {
     parent::__construct($configuration, $plugin_id, $plugin_definition);
@@ -60,6 +65,8 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
       $container->get('entity_type.manager'),
       $container->get(FilterResolver::class),
       $container->get(SelectionNormalizer::class),
+      $container->get(SelectionValidator::class),
+      $container->get(ValueSource::class),
       $container->get(ArgumentBuilder::class),
     );
   }
@@ -123,7 +130,16 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
    */
   public function alterView(ViewExecutable $view, $value): void {
     $filters = $this->filterResolver->forView($view);
+    if (!$filters) {
+      return;
+    }
+    $value = $this->valueSource->resolve($view, $value);
     $selection = $this->selectionNormalizer->fromStorage($value, $filters);
+    $selection = $this->selectionValidator->validate($selection, $filters);
+    foreach ($selection->filters as $id => $selected) {
+      $tags = Cache::buildTags($filters[$id]->entityTypeId, $selected->ids);
+      $view->element['#cache']['tags'] = Cache::mergeTags($view->element['#cache']['tags'] ?? [], $tags);
+    }
     $arguments = $this->argumentBuilder->build($filters, $selection, $view->args);
     if ($arguments !== $view->args) {
       $view->setArguments($arguments);

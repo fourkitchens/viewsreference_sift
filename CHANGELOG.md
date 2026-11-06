@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Security
+
+- Ignores Sift values from the query string outside Views AJAX requests.
+
 ### Changed
 
 - Requires Drupal 11.3 or later; Drupal 10 is no longer supported.
@@ -20,12 +24,21 @@
 - Rewired the Terms setting to resolve filters and normalize widget submissions.
 - Stores selections in a versioned format; values saved by 1.0.0-beta1 keep
   working.
+- Snapshots the server-set Terms selection before Views Reference runs.
+- Reloads the saved selection for Views AJAX when the field item can be found.
+- Preserves the display's validation failure action when every capped ID is
+  invalid.
+- Adds cache tags for selected entities to the rendered View.
+- Caps each filter at 10 selections.
+- Drops selected IDs that no longer exist or fall outside the allowed bundles.
 
 ### Added
 
 - Added level 6 PHPStan analysis for module code and tests.
 - Added cspell with a project dictionary.
 - Added a kernel test for Terms, Argument, and Limit setting discovery.
+- Added kernel coverage for forged values, AJAX fallback, and rendered cache
+  tags.
 
 ## [1.0.0-beta1] - 2026-11-06
 

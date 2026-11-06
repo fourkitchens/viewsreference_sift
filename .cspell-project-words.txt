@@ -1,11 +1,13 @@
 browsertest
 dealerdirect
+fieldable
 fourkitchens
 langcode
 phpcodesniffer
 phpcs
 phpstan
 phpunit
+revisionable
 shivammathur
 simpletest
 viewsreference

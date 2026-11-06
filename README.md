@@ -63,7 +63,10 @@ filter.
 
 ## Limits
 
-The field stores term IDs in its saved settings. A deleted term stops matching
-and drops out of the widget when you reopen the content. When contextual filter
-validation is enabled, Views applies its configured validation failure action
-if a saved ID no longer exists.
+Sift applies up to 10 selections per filter and ignores URL values outside
+Views AJAX requests.
+
+Deleted terms drop out of the widget when you reopen the content. Sift filters
+out missing terms and terms outside the allowed vocabularies. If none of the
+capped IDs survive, Views handles those IDs using the display's configured
+validation failure action.
