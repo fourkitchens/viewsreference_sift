@@ -638,47 +638,38 @@ class SiftTermsTest extends KernelTestBase {
   }
 
   /**
-   * Tests that Views AJAX reloads the saved field item when available.
+   * Tests that Views AJAX validates supplied values and ignores the parent.
    */
-  public function testAjaxPrefersSavedSelection(): void {
+  public function testAjaxUsesSuppliedSelectionDespiteParentMetadata(): void {
     $node = $this->createListing([$this->termIds['A']]);
-    $parent = $this->parentMetadata($node);
-    $forged = $this->storedSelection('tid', [$this->termIds['B']]);
-    $item = $node->get('field_listing')->first();
-    $this->assertNotNull($item);
-    $item->set('data', serialize(['sift_terms' => $forged]));
-    $node->setNewRevision(TRUE);
-    $node->save();
-    $this->assertNotSame($parent['parent_revision_id'], $node->getRevisionId());
+    $node->setUnpublished()->save();
+    $missing_id = max($this->termIds) + 1;
+    $supplied = $this->storedSelection('tid', [$this->termIds['C'], $missing_id, (string) $this->termIds['B']]);
+    $view = $this->executeWithSetting('embed_terms', $supplied, TRUE, $this->parentMetadata($node));
 
-    $view = $this->executeWithSetting('embed_terms', $forged, TRUE, $parent);
-
-    $this->assertSame([(string) $this->termIds['A']], $view->args);
-    $this->assertResultTitles(['A', 'Both'], $view);
+    $this->assertSame([(string) $this->termIds['B']], $view->args);
+    $this->assertResultTitles(['B', 'Both'], $view);
   }
 
   /**
-   * Tests that AJAX fallback checks bundles and retains validation failure.
+   * Tests that AJAX checks supplied bundles and retains validation failure.
    */
-  public function testAjaxValidatesFallbackSelection(): void {
-    $node = $this->createListing([$this->termIds['B']]);
-    $missing_item = $this->parentMetadata($node, 1);
+  public function testAjaxValidatesSuppliedSelection(): void {
     $mixed = $this->storedSelection('tid', [$this->termIds['C'], $this->termIds['A']]);
-    $view = $this->executeWithSetting('embed_terms', $mixed, TRUE, $missing_item);
+    $view = $this->executeWithSetting('embed_terms', $mixed, TRUE);
     $this->assertSame([(string) $this->termIds['A']], $view->args);
     $this->assertResultTitles(['A', 'Both'], $view);
 
     $wrong_bundle = $this->storedSelection('tid', [$this->termIds['C']]);
-    $view = $this->executeWithSetting('embed_terms', $wrong_bundle, TRUE, $missing_item, FALSE);
+    $view = $this->executeWithSetting('embed_terms', $wrong_bundle, TRUE, expected_success: FALSE);
     $this->assertTrue($view->build_info['fail']);
     $this->assertSame([], $view->result);
   }
 
   /**
-   * Tests that a large AJAX fallback selection contributes only ten IDs.
+   * Tests that a large supplied AJAX selection contributes only ten IDs.
    */
-  public function testAjaxCapsFallbackSelection(): void {
-    $node = $this->createListing([$this->termIds['B']]);
+  public function testAjaxCapsSuppliedSelection(): void {
     $ids = [];
     for ($index = 0; $index < 12; $index++) {
       $term = Term::create(['vid' => 'tags', 'name' => 'Extra term ' . $index]);
@@ -686,7 +677,7 @@ class SiftTermsTest extends KernelTestBase {
       $ids[] = (int) $term->id();
     }
     $selection = $this->storedSelection('tid', array_merge($ids, range(1000, 1487)));
-    $view = $this->executeWithSetting('embed_terms', $selection, TRUE, $this->parentMetadata($node, 1));
+    $view = $this->executeWithSetting('embed_terms', $selection, TRUE);
 
     $this->assertSame([implode('+', array_slice($ids, 0, 10))], $view->args);
   }
@@ -788,14 +779,14 @@ class SiftTermsTest extends KernelTestBase {
    *
    * @phpstan-return array<string, mixed>
    */
-  protected function parentMetadata(NodeInterface $node, int $delta = 0): array {
+  protected function parentMetadata(NodeInterface $node): array {
     return [
       'parent_entity_type' => $node->getEntityTypeId(),
       'parent_entity_id' => $node->id(),
       'parent_entity_langcode' => $node->language()->getId(),
       'parent_field_name' => 'field_listing',
       'parent_revision_id' => $node->getRevisionId(),
-      'field_item_delta' => $delta,
+      'field_item_delta' => 0,
     ];
   }
 
