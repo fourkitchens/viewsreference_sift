@@ -1,0 +1,54 @@
+views.display_extender.viewsreference_sift:
+  type: views_display_extender
+  label: 'Views Reference Sift settings'
+  mapping:
+    filters:
+      type: sequence
+      label: 'Contextual filters'
+      sequence:
+        type: mapping
+        label: 'Contextual filter settings'
+        mapping:
+          enabled:
+            type: boolean
+            label: 'Enabled'
+          label:
+            type: label
+            label: 'Label'
+          description:
+            type: text
+            label: 'Description'
+          bundles:
+            type: sequence
+            label: 'Allowed bundles'
+            sequence:
+              type: string
+              label: 'Bundle ID'
+          match:
+            type: string
+            label: 'Match mode'
+            constraints:
+              Choice:
+                choices:
+                  - editor
+                  - any
+                  - all
+          widget:
+            type: string
+            label: 'Widget'
+            constraints:
+              Choice:
+                choices:
+                  - autocomplete
+                  - checkboxes
+                  - select
+          required:
+            type: boolean
+            label: 'Required'
+          max:
+            type: integer
+            label: 'Maximum selections'
+            constraints:
+              Range:
+                min: 1
+                max: 50
