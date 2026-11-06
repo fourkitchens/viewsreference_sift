@@ -116,10 +116,18 @@ jobs:
           composer config allow-plugins.cweagans/composer-patches true
           composer require --dev --no-interaction 'cweagans/composer-patches:^2'
           composer patches-repatch --no-interaction
-      - name: Run kernel tests
+      - name: Run tests
         working-directory: ${{ runner.temp }}/site
         env:
           SIMPLETEST_DB: sqlite://localhost/${{ runner.temp }}/test.sqlite
-          SIMPLETEST_BASE_URL: http://localhost
+          SIMPLETEST_BASE_URL: http://127.0.0.1:8080
           BROWSERTEST_OUTPUT_DIRECTORY: ${{ runner.temp }}
-        run: vendor/bin/phpunit -c web/core --display-deprecations web/modules/contrib/viewsreference_sift
+        run: |
+          php -S 127.0.0.1:8080 -t "$PWD/web" "$PWD/web/.ht.router.php" > "$RUNNER_TEMP/php-server.log" 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          if ! curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 1 --output /dev/null "$SIMPLETEST_BASE_URL"; then
+            cat "$RUNNER_TEMP/php-server.log"
+            exit 1
+          fi
+          vendor/bin/phpunit -c web/core --display-deprecations web/modules/contrib/viewsreference_sift

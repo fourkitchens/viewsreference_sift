@@ -1,0 +1,66 @@
+<?php
+
+/**
+ * @file
+ * Install and uninstall hooks for Views Reference Sift.
+ */
+
+declare(strict_types=1);
+
+/**
+ * Implements hook_install().
+ */
+function viewsreference_sift_install(): void {
+  _viewsreference_sift_enable_display_extender();
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function viewsreference_sift_uninstall(): void {
+  $plugin_id = 'viewsreference_sift';
+  $config_factory = \Drupal::configFactory();
+  $views_settings = $config_factory->getEditable('views.settings');
+  $extenders = $views_settings->get('display_extenders') ?? [];
+  $remaining = array_filter($extenders, static fn (mixed $id): bool => $id !== $plugin_id);
+  unset($remaining[$plugin_id]);
+  if ($remaining !== $extenders) {
+    $views_settings->set('display_extenders', array_is_list($extenders) ? array_values($remaining) : $remaining)->save();
+  }
+
+  foreach ($config_factory->listAll('views.view.') as $name) {
+    $view = $config_factory->getEditable($name);
+    $displays = $view->get('display') ?? [];
+    $changed = FALSE;
+    foreach ($displays as $display_id => $display) {
+      $options = $display['display_options']['display_extenders'] ?? [];
+      if (is_array($options) && array_key_exists($plugin_id, $options)) {
+        unset($displays[$display_id]['display_options']['display_extenders'][$plugin_id]);
+        $changed = TRUE;
+      }
+    }
+    if ($changed) {
+      $view->set('display', $displays)->save();
+    }
+  }
+}
+
+/**
+ * Enables the Sift display extender without duplicating it.
+ */
+function _viewsreference_sift_enable_display_extender(): void {
+  $plugin_id = 'viewsreference_sift';
+  $views_settings = \Drupal::configFactory()->getEditable('views.settings');
+  $extenders = $views_settings->get('display_extenders') ?? [];
+  if (in_array($plugin_id, $extenders, TRUE)) {
+    return;
+  }
+
+  if (array_is_list($extenders)) {
+    $extenders[] = $plugin_id;
+  }
+  else {
+    $extenders[$plugin_id] = $plugin_id;
+  }
+  $views_settings->set('display_extenders', $extenders)->save();
+}
