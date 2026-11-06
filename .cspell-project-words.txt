@@ -1,8 +1,10 @@
 browsertest
 dealerdirect
+drush
 fieldable
 fourkitchens
 langcode
+packagist
 phpcodesniffer
 phpcs
 phpstan
@@ -10,4 +12,5 @@ phpunit
 revisionable
 shivammathur
 simpletest
+updb
 viewsreference
