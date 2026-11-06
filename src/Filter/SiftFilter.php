@@ -12,6 +12,18 @@ use Drupal\Core\StringTranslation\TranslatableMarkup;
 final readonly class SiftFilter {
 
   public const DEFAULT_MAX = 10;
+  public const MAX_LIMIT = 50;
+
+  public const DEFAULT_OPTIONS = [
+    'enabled' => TRUE,
+    'label' => '',
+    'description' => '',
+    'bundles' => [],
+    'match' => 'editor',
+    'widget' => 'autocomplete',
+    'max' => self::DEFAULT_MAX,
+    'required' => FALSE,
+  ];
 
   /**
    * Constructs a Sift filter description.

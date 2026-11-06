@@ -11,6 +11,7 @@ use Drupal\Core\Entity\FieldableEntityInterface;
 use Drupal\views\Plugin\ViewsHandlerManager;
 use Drupal\views\Plugin\views\argument\ArgumentPluginBase;
 use Drupal\views\Plugin\views\argument\ManyToOne;
+use Drupal\views\Plugin\views\display\DisplayPluginBase;
 use Drupal\views\ViewEntityInterface;
 use Drupal\views\ViewExecutable;
 use Drupal\views\ViewExecutableFactory;
@@ -44,8 +45,20 @@ final class FilterResolver {
   public function forView(ViewExecutable $view): array {
     /** @var \Drupal\views\Plugin\views\display\DisplayPluginBase|null $display */
     $display = $view->display_handler;
+    return $display ? $this->supportedFilters($display) : [];
+  }
+
+  /**
+   * Lists supported filters for the display being edited in Views.
+   *
+   * @return \Drupal\viewsreference_sift\Filter\SiftFilter[]
+   *   The filters keyed by argument handler ID.
+   *
+   * @phpstan-return array<string, SiftFilter>
+   */
+  public function supportedFilters(DisplayPluginBase $display): array {
     /** @var array<string, \Drupal\views\Plugin\views\ViewsHandlerInterface> $handlers */
-    $handlers = $display?->getHandlers('argument') ?? [];
+    $handlers = $display->getHandlers('argument');
 
     $filters = [];
     foreach (array_keys($handlers) as $position => $id) {
