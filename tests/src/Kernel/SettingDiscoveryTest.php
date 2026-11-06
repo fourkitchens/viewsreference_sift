@@ -33,7 +33,7 @@ class SettingDiscoveryTest extends KernelTestBase {
     $this->assertTrue($manager->hasDefinition('sift_terms'));
     $definition = $manager->getDefinition('sift_terms');
     $this->assertIsArray($definition);
-    $this->assertSame('Terms', (string) $definition['label']);
+    $this->assertSame('Sift filters', (string) $definition['label']);
     $this->assertTrue($manager->hasDefinition('argument'));
     $this->assertTrue($manager->hasDefinition('limit'));
   }

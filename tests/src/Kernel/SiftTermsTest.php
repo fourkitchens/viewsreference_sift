@@ -17,6 +17,7 @@ use Drupal\node\NodeInterface;
 use Drupal\taxonomy\Entity\Term;
 use Drupal\taxonomy\Entity\Vocabulary;
 use Drupal\Tests\field\Traits\EntityReferenceFieldCreationTrait;
+use Drupal\user\Entity\User;
 use Drupal\views\ResultRow;
 use Drupal\views\ViewExecutable;
 use Drupal\views\Views;
@@ -26,7 +27,7 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Route;
 
 /**
- * Tests the Terms setting with embedded Views displays.
+ * Tests Sift filters with embedded Views displays.
  */
 #[Group('viewsreference_sift')]
 #[RunTestsInSeparateProcesses]
@@ -78,9 +79,13 @@ class SiftTermsTest extends KernelTestBase {
     $this->installConfig(['system', 'field', 'filter', 'node', 'taxonomy', 'views']);
 
     NodeType::create(['type' => 'article', 'name' => 'Article'])->save();
+    NodeType::create(['type' => 'program', 'name' => 'Program'])->save();
     $this->createEntityReferenceField('node', 'article', 'field_tags', 'Tags', 'taxonomy_term', 'default', [], FieldStorageDefinitionInterface::CARDINALITY_UNLIMITED);
     Vocabulary::create(['vid' => 'tags', 'name' => 'Tags'])->save();
     Vocabulary::create(['vid' => 'other', 'name' => 'Other'])->save();
+    Vocabulary::create(['vid' => 'audience', 'name' => 'Audience'])->save();
+    $this->createEntityReferenceField('node', 'article', 'field_audience', 'Audience', 'taxonomy_term', 'default', ['target_bundles' => ['audience' => 'audience']]);
+    $this->createEntityReferenceField('node', 'article', 'field_program', 'Program', 'node', 'default', ['target_bundles' => ['program' => 'program']]);
     foreach (['A' => 'tags', 'B' => 'tags', 'C' => 'other'] as $name => $vocabulary) {
       $term = Term::create(['vid' => $vocabulary, 'name' => $name]);
       $term->save();
@@ -127,6 +132,99 @@ class SiftTermsTest extends KernelTestBase {
       $this->termIds['B'] . '+' . $this->termIds['C'],
     ]);
     $this->assertResultTitles(['A', 'Both'], $this->executeWithSetting('embed_terms', $malformed, TRUE));
+  }
+
+  /**
+   * Tests individual and combined filters on a four-argument display.
+   */
+  public function testMultipleFilterArguments(): void {
+    $ids = $this->createMultipleFilterContent();
+    $tags = $this->storedSelection('tid_tags', [$this->termIds['A']]);
+    $audience = $this->storedSelection('tid_audience', [$ids['audience']]);
+    $program = $this->storedSelection('field_program_target_id', [$ids['program']]);
+    $author = $this->storedSelection('uid', [$ids['author']]);
+
+    $this->assertResultTitles(['A', 'Both'], $this->executeWithSetting('embed_multi', $tags));
+    $this->assertResultTitles(['B', 'Both'], $this->executeWithSetting('embed_multi', $audience));
+    $this->assertResultTitles(['A', 'B'], $this->executeWithSetting('embed_multi', $program));
+    $this->assertResultTitles(['B', 'Neither'], $this->executeWithSetting('embed_multi', $author));
+
+    $tags_and_audience = $tags;
+    $tags_and_audience['filters'] += $audience['filters'];
+    $this->assertResultTitles(['Both'], $this->executeWithSetting('embed_multi', $tags_and_audience));
+
+    $program_and_author = $program;
+    $program_and_author['filters'] += $author['filters'];
+    $this->assertResultTitles(['B'], $this->executeWithSetting('embed_multi', $program_and_author));
+
+    $all_tags = $this->storedSelection('tid_tags', [$this->termIds['A'], $this->termIds['B']], 'all');
+    $this->assertResultTitles(['Both'], $this->executeWithSetting('embed_multi', $all_tags));
+
+    $tags_and_program = $tags;
+    $tags_and_program['filters'] += $this->storedSelection('field_program_target_id', [$ids['other_program']])['filters'];
+    $view = $this->executeWithSetting('embed_multi', $tags_and_program);
+    $this->assertSame([(string) $this->termIds['A'], 'all', (string) $ids['other_program']], $view->args);
+    $this->assertResultTitles(['Both'], $view);
+
+    $legacy = ['terms' => [['target_id' => (string) $this->termIds['A']]]];
+    $view = $this->executeWithSetting('embed_multi', $legacy);
+    $this->assertSame([(string) $this->termIds['A']], $view->args);
+    $this->assertResultTitles(['A', 'Both'], $view);
+  }
+
+  /**
+   * Tests that each supported filter gets its own widget group.
+   */
+  public function testMultipleFilterWidget(): void {
+    $field = $this->termsElement('embed_multi');
+    $this->assertSame('Filter this list', (string) $field['#title']);
+    $expected = [
+      'tid_tags' => ['Tags', 'taxonomy_term', ['tags'], TRUE],
+      'tid_audience' => ['Audience', 'taxonomy_term', ['audience'], TRUE],
+      'field_program_target_id' => ['Program', 'node', ['program'], FALSE],
+      'uid' => ['Author', 'user', [], FALSE],
+    ];
+    $this->assertSame(array_keys($expected), array_keys($field['filters']));
+    foreach ($expected as $id => [$label, $target, $bundles, $multiple]) {
+      $group = $field['filters'][$id];
+      $widget = $group['ids'];
+      $this->assertSame('fieldset', $group['#type']);
+      $this->assertSame($label, (string) $group['#title']);
+      $this->assertSame('entity_autocomplete', $widget['#type']);
+      $this->assertSame($target, $widget['#target_type']);
+      $this->assertSame($bundles, array_values($widget['#selection_settings']['target_bundles'] ?? []));
+      $this->assertSame($multiple, $widget['#tags']);
+      if ($multiple) {
+        $this->assertSame(['any', 'all'], array_keys($group['match']['#options']));
+      }
+      else {
+        $this->assertArrayNotHasKey('match', $group);
+      }
+    }
+  }
+
+  /**
+   * Tests that Views target metadata supplies the type without validation.
+   */
+  public function testReferenceMetadataFallback(): void {
+    $view = Views::getView('viewsreference_sift_test');
+    $this->assertInstanceOf(ViewExecutable::class, $view);
+    $this->assertTrue($view->setDisplay('embed_multi'));
+    $arguments = $view->display_handler->getOption('arguments');
+    $arguments['field_program_target_id']['specify_validation'] = FALSE;
+    $arguments['field_program_target_id']['validate']['type'] = 'none';
+    unset($arguments['field_program_target_id']['validate_options']);
+    $view->display_handler->overrideOption('arguments', $arguments);
+    $view->storage->save();
+
+    $field = $this->termsElement('embed_multi');
+    $group = $field['filters']['field_program_target_id'] ?? NULL;
+    $this->assertIsArray($group);
+    $this->assertSame('content items', (string) $group['#title']);
+    $this->assertSame('node', $group['ids']['#target_type']);
+    $this->assertFalse($group['ids']['#tags']);
+    $this->assertArrayNotHasKey('match', $group);
+    $this->assertArrayNotHasKey('#selection_settings', $group['ids']);
   }
 
   /**
@@ -465,6 +563,54 @@ class SiftTermsTest extends KernelTestBase {
 
     $this->assertContains('taxonomy_term:' . $this->termIds['A'], $build['#cache']['tags']);
     $this->assertContains('taxonomy_term:' . $this->termIds['B'], $build['#cache']['tags']);
+  }
+
+  /**
+   * Adds audience, program, and author values to the fixture articles.
+   *
+   * @phpstan-return array{audience: int, program: int, other_program: int, author: int}
+   */
+  protected function createMultipleFilterContent(): array {
+    $audiences = [];
+    foreach (['Public', 'Staff'] as $name) {
+      $term = Term::create(['vid' => 'audience', 'name' => $name]);
+      $term->save();
+      $audiences[$name] = (int) $term->id();
+    }
+    $programs = [];
+    foreach (['Alpha', 'Beta'] as $title) {
+      $node = Node::create(['type' => 'program', 'title' => $title, 'status' => TRUE]);
+      $node->save();
+      $programs[$title] = (int) $node->id();
+    }
+    $authors = [];
+    foreach (['one', 'two'] as $name) {
+      $user = User::create(['name' => 'Writer ' . $name, 'mail' => 'writer-' . $name . '@example.com', 'status' => TRUE]);
+      $user->save();
+      $authors[$name] = (int) $user->id();
+    }
+
+    $assignments = [
+      'A' => ['Public', 'Alpha', 'two'],
+      'B' => ['Staff', 'Alpha', 'one'],
+      'Both' => ['Staff', 'Beta', 'two'],
+      'Neither' => ['Public', 'Beta', 'one'],
+    ];
+    foreach ($assignments as $title => [$audience, $program, $author]) {
+      $node = Node::load($this->nodeIds[$title]);
+      $this->assertInstanceOf(NodeInterface::class, $node);
+      $node->set('field_audience', ['target_id' => $audiences[$audience]]);
+      $node->set('field_program', ['target_id' => $programs[$program]]);
+      $node->setOwnerId($authors[$author]);
+      $node->save();
+    }
+
+    return [
+      'audience' => $audiences['Staff'],
+      'program' => $programs['Alpha'],
+      'other_program' => $programs['Beta'],
+      'author' => $authors['one'],
+    ];
   }
 
   /**

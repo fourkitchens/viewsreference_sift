@@ -2,10 +2,15 @@ langcode: en
 status: true
 dependencies:
   config:
+    - field.storage.node.field_program
+    - node.type.article
+    - node.type.program
+    - taxonomy.vocabulary.audience
     - taxonomy.vocabulary.tags
   module:
     - node
     - taxonomy
+    - user
 id: viewsreference_sift_test
 label: Views Reference Sift Test
 module: views
@@ -165,3 +170,89 @@ display:
             bundles:
               tags: tags
             multiple: 1
+  embed_multi:
+    display_plugin: embed
+    id: embed_multi
+    display_title: Multiple filters
+    position: 6
+    display_options:
+      defaults:
+        arguments: false
+        filters: false
+      filters:
+        type:
+          id: type
+          table: node_field_data
+          field: type
+          entity_type: node
+          entity_field: type
+          plugin_id: bundle
+          operator: in
+          value:
+            article: article
+      arguments:
+        tid_tags:
+          id: tid_tags
+          table: taxonomy_index
+          field: tid
+          plugin_id: taxonomy_index_tid
+          admin_label: Tags
+          break_phrase: true
+          default_action: ignore
+          exception:
+            value: all
+          specify_validation: true
+          validate:
+            type: 'entity:taxonomy_term'
+            fail: 'not found'
+          validate_options:
+            bundles:
+              tags: tags
+            multiple: 1
+        tid_audience:
+          id: tid_audience
+          table: taxonomy_index
+          field: tid
+          plugin_id: taxonomy_index_tid
+          break_phrase: true
+          default_action: ignore
+          exception:
+            value: all
+          specify_validation: true
+          validate:
+            type: 'entity:taxonomy_term'
+            fail: 'not found'
+          validate_options:
+            bundles:
+              audience: audience
+            multiple: 1
+        field_program_target_id:
+          id: field_program_target_id
+          table: node__field_program
+          field: field_program_target_id
+          plugin_id: entity_target_id
+          default_action: ignore
+          exception:
+            value: all
+          specify_validation: true
+          validate:
+            type: 'entity:node'
+            fail: 'not found'
+          validate_options:
+            bundles:
+              program: program
+        uid:
+          id: uid
+          table: node_field_data
+          field: uid
+          entity_type: node
+          entity_field: uid
+          plugin_id: entity_target_id
+          admin_label: Author
+          default_action: ignore
+          exception:
+            value: all
+          specify_validation: true
+          validate:
+            type: 'entity:user'
+            fail: 'not found'

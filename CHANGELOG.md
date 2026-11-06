@@ -12,6 +12,7 @@
 ### Added
 
 - One widget per supported contextual filter.
+- Added kernel coverage for combined filters and references to nodes and users.
 
 ## [1.0.0-beta2] - 2026-11-06
 
