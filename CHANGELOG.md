@@ -8,6 +8,9 @@ Views Reference Sift follows [Semantic Versioning][semver].
 ### Added
 
 - Adds a Drupal Help page with field and display setup instructions.
+- Adds Views UI warnings when an earlier contextual filter's missing-value
+  action can block a Sift selection and notes when a selection depends on
+  a default value.
 
 ### Fixed
 
