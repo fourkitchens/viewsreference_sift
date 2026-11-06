@@ -4,8 +4,12 @@ declare(strict_types=1);
 
 namespace Drupal\Tests\viewsreference_sift\Kernel;
 
+use Drupal\Core\Entity\Entity\EntityViewDisplay;
 use Drupal\Core\Field\FieldStorageDefinitionInterface;
 use Drupal\Core\Form\FormState;
+use Drupal\Core\Routing\RouteObjectInterface;
+use Drupal\field\Entity\FieldConfig;
+use Drupal\field\Entity\FieldStorageConfig;
 use Drupal\KernelTests\KernelTestBase;
 use Drupal\node\Entity\Node;
 use Drupal\node\Entity\NodeType;
@@ -19,6 +23,7 @@ use Drupal\views\Views;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\Routing\Route;
 
 /**
  * Tests the Terms setting with embedded Views displays.
@@ -229,6 +234,182 @@ class SiftTermsTest extends KernelTestBase {
   }
 
   /**
+   * Tests that a node page renders its saved selection despite forged data.
+   */
+  public function testPagePrefersSavedSelection(): void {
+    $node = $this->createListing([$this->termIds['A']]);
+    EntityViewDisplay::create([
+      'targetEntityType' => 'node',
+      'bundle' => 'article',
+      'mode' => 'default',
+      'status' => TRUE,
+    ])->setComponent('field_listing', [
+      'type' => 'viewsreference_formatter',
+      'label' => 'hidden',
+    ])->save();
+    $view = Views::getView('viewsreference_sift_test');
+    $this->assertInstanceOf(ViewExecutable::class, $view);
+    $forged = $this->storedSelection('tid', [$this->termIds['B']]);
+    $request = $this->requestWithSetting($view, $forged, '/node/' . $node->id(), 'entity.node.canonical');
+    $request->attributes->set('node', $node);
+    $request_stack = $this->container->get('request_stack');
+    $request_stack->push($request);
+    try {
+      $build = $this->container->get('entity_type.manager')->getViewBuilder('node')->view($node);
+      $markup = (string) $this->container->get('renderer')->renderRoot($build);
+    }
+    finally {
+      $request_stack->pop();
+    }
+
+    $this->assertStringContainsString('>A<', $markup);
+    $this->assertStringContainsString('>Both<', $markup);
+    $this->assertStringNotContainsString('>B<', $markup);
+  }
+
+  /**
+   * Tests that a standalone View ignores forged settings on both passes.
+   */
+  public function testStandaloneViewIgnoresForgedSelection(): void {
+    $view = Views::getView('viewsreference_sift_test');
+    $this->assertInstanceOf(ViewExecutable::class, $view);
+    $this->assertTrue($view->setDisplay('page_terms'));
+    $forged = $this->storedSelection('tid', [$this->termIds['B']]);
+    $request = $this->requestWithSetting($view, $forged, '/listing', 'view.viewsreference_sift_test.page_terms');
+    $view->setRequest($request);
+    $request_stack = $this->container->get('request_stack');
+    $request_stack->push($request);
+    try {
+      $view->preExecute();
+      $this->assertSame([], $view->args);
+      $view->postExecute();
+
+      $view->preExecute();
+      $this->assertSame([], $view->args);
+      $this->assertTrue($view->execute());
+      $view->postExecute();
+    }
+    finally {
+      $request_stack->pop();
+    }
+    $this->assertResultTitles(['A', 'B', 'Both', 'Neither'], $view);
+  }
+
+  /**
+   * Tests that Views AJAX reloads the saved field item when available.
+   */
+  public function testAjaxPrefersSavedSelection(): void {
+    $node = $this->createListing([$this->termIds['A']]);
+    $parent = $this->parentMetadata($node);
+    $forged = $this->storedSelection('tid', [$this->termIds['B']]);
+    $item = $node->get('field_listing')->first();
+    $this->assertNotNull($item);
+    $item->set('data', serialize(['sift_terms' => $forged]));
+    $node->setNewRevision(TRUE);
+    $node->save();
+    $this->assertNotSame($parent['parent_revision_id'], $node->getRevisionId());
+
+    $view = $this->executeWithSetting('embed_terms', $forged, TRUE, $parent);
+
+    $this->assertSame([(string) $this->termIds['A']], $view->args);
+    $this->assertResultTitles(['A', 'Both'], $view);
+  }
+
+  /**
+   * Tests that AJAX fallback checks bundles and retains validation failure.
+   */
+  public function testAjaxValidatesFallbackSelection(): void {
+    $node = $this->createListing([$this->termIds['B']]);
+    $missing_item = $this->parentMetadata($node, 1);
+    $mixed = $this->storedSelection('tid', [$this->termIds['C'], $this->termIds['A']]);
+    $view = $this->executeWithSetting('embed_terms', $mixed, TRUE, $missing_item);
+    $this->assertSame([(string) $this->termIds['A']], $view->args);
+    $this->assertResultTitles(['A', 'Both'], $view);
+
+    $wrong_bundle = $this->storedSelection('tid', [$this->termIds['C']]);
+    $view = $this->executeWithSetting('embed_terms', $wrong_bundle, TRUE, $missing_item, FALSE);
+    $this->assertTrue($view->build_info['fail']);
+    $this->assertSame([], $view->result);
+  }
+
+  /**
+   * Tests that a large AJAX fallback selection contributes only ten IDs.
+   */
+  public function testAjaxCapsFallbackSelection(): void {
+    $node = $this->createListing([$this->termIds['B']]);
+    $ids = [];
+    for ($index = 0; $index < 12; $index++) {
+      $term = Term::create(['vid' => 'tags', 'name' => 'Extra term ' . $index]);
+      $term->save();
+      $ids[] = (int) $term->id();
+    }
+    $selection = $this->storedSelection('tid', array_merge($ids, range(1000, 1487)));
+    $view = $this->executeWithSetting('embed_terms', $selection, TRUE, $this->parentMetadata($node, 1));
+
+    $this->assertSame([implode('+', array_slice($ids, 0, 10))], $view->args);
+  }
+
+  /**
+   * Tests that each selected term's cache tag bubbles through the embed.
+   */
+  public function testRenderedEmbedCarriesTermCacheTags(): void {
+    $node = $this->createListing([$this->termIds['A'], $this->termIds['B']]);
+    $build = $node->get('field_listing')->view(['type' => 'viewsreference_formatter', 'label' => 'hidden']);
+    $this->container->get('renderer')->renderRoot($build);
+
+    $this->assertContains('taxonomy_term:' . $this->termIds['A'], $build['#cache']['tags']);
+    $this->assertContains('taxonomy_term:' . $this->termIds['B'], $build['#cache']['tags']);
+  }
+
+  /**
+   * Saves a node with a configured Views Reference field item.
+   *
+   * @phpstan-param list<int> $ids
+   */
+  protected function createListing(array $ids): NodeInterface {
+    FieldStorageConfig::create([
+      'field_name' => 'field_listing',
+      'entity_type' => 'node',
+      'type' => 'viewsreference',
+    ])->save();
+    FieldConfig::create([
+      'field_name' => 'field_listing',
+      'entity_type' => 'node',
+      'bundle' => 'article',
+      'label' => 'Listing',
+      'settings' => ['enabled_settings' => ['sift_terms' => 'sift_terms']],
+    ])->save();
+    $node = Node::create([
+      'type' => 'article',
+      'title' => 'Listing',
+      'status' => TRUE,
+      'field_listing' => [
+        'target_id' => 'viewsreference_sift_test',
+        'display_id' => 'embed_terms',
+        'data' => serialize(['sift_terms' => $this->storedSelection('tid', $ids)]),
+      ],
+    ]);
+    $node->save();
+    return $node;
+  }
+
+  /**
+   * Builds parent field metadata using the Views Reference formatter keys.
+   *
+   * @phpstan-return array<string, mixed>
+   */
+  protected function parentMetadata(NodeInterface $node, int $delta = 0): array {
+    return [
+      'parent_entity_type' => $node->getEntityTypeId(),
+      'parent_entity_id' => $node->id(),
+      'parent_entity_langcode' => $node->language()->getId(),
+      'parent_field_name' => 'field_listing',
+      'parent_revision_id' => $node->getRevisionId(),
+      'field_item_delta' => $delta,
+    ];
+  }
+
+  /**
    * Builds a stored version 2 selection for one filter.
    *
    * @phpstan-param list<int|string> $ids
@@ -243,25 +424,53 @@ class SiftTermsTest extends KernelTestBase {
 
   /**
    * Executes an embed through the Views Reference pre-view hook.
+   *
+   * @phpstan-param array<string, mixed> $parent
    */
-  protected function executeWithSetting(string $display, mixed $value, bool $request = FALSE): ViewExecutable {
+  protected function executeWithSetting(string $display, mixed $value, bool $ajax = FALSE, array $parent = [], bool $expected_success = TRUE): ViewExecutable {
     $view = Views::getView('viewsreference_sift_test');
+    $this->assertInstanceOf(ViewExecutable::class, $view);
     $this->assertTrue($view->setDisplay($display));
-    $settings = [
+    $request_stack = $this->container->get('request_stack');
+    if ($ajax) {
+      $ajax_request = $this->requestWithSetting($view, $value, '/views/ajax', 'views.ajax', $parent);
+      $view->setRequest($ajax_request);
+      $request_stack->push($ajax_request);
+    }
+    else {
+      $view->element['#viewsreference'] = [
+        'enabled_settings' => ['sift_terms'],
+        'data' => ['sift_terms' => $value],
+      ];
+    }
+    try {
+      $view->preExecute();
+      $this->assertSame($expected_success, $view->execute());
+      $view->postExecute();
+    }
+    finally {
+      if ($ajax) {
+        $request_stack->pop();
+      }
+    }
+    return $view;
+  }
+
+  /**
+   * Creates a routed request with compressed Views Reference settings.
+   *
+   * @phpstan-param array<string, mixed> $parent
+   */
+  protected function requestWithSetting(ViewExecutable $view, mixed $value, string $path, string $route, array $parent = []): Request {
+    $settings = $parent + [
       'enabled_settings' => ['sift_terms'],
       'data' => ['sift_terms' => $value],
     ];
-    if ($request) {
-      $settings = $this->container->get('viewsreference.compression')->compress($settings, $view);
-      $view->setRequest(Request::create('/', 'GET', ['viewsreference' => $settings]));
-    }
-    else {
-      $view->element['#viewsreference'] = $settings;
-    }
-    $view->preExecute();
-    $this->assertTrue($view->execute());
-    $view->postExecute();
-    return $view;
+    $compressed = $this->container->get('viewsreference.compression')->compress($settings, $view);
+    $request = Request::create($path, 'GET', ['viewsreference' => $compressed]);
+    $request->attributes->set(RouteObjectInterface::ROUTE_NAME, $route);
+    $request->attributes->set(RouteObjectInterface::ROUTE_OBJECT, new Route($path));
+    return $request;
   }
 
   /**

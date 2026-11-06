@@ -110,3 +110,22 @@ display:
     display_title: Plain
     position: 3
     display_options: {  }
+  page_terms:
+    display_plugin: page
+    id: page_terms
+    display_title: Listing
+    position: 4
+    display_options:
+      path: listing
+      defaults:
+        arguments: false
+      arguments:
+        tid:
+          id: tid
+          table: taxonomy_index
+          field: tid
+          plugin_id: taxonomy_index_tid
+          break_phrase: true
+          default_action: ignore
+          exception:
+            value: all

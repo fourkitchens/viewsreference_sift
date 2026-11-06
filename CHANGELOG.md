@@ -31,6 +31,8 @@
 - Added level 6 PHPStan analysis for module code and tests.
 - Added cspell with a project dictionary.
 - Added a kernel test for Terms, Argument, and Limit setting discovery.
+- Added kernel coverage for forged values, AJAX fallback, and rendered cache
+  tags.
 
 ## [1.0.0-beta1] - 2026-11-06
 
