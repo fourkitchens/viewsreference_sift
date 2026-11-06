@@ -1,0 +1,11 @@
+diff --git a/src/Plugin/Field/FieldFormatter/ViewsReferenceFieldFormatter.php b/src/Plugin/Field/FieldFormatter/ViewsReferenceFieldFormatter.php
+--- a/src/Plugin/Field/FieldFormatter/ViewsReferenceFieldFormatter.php
++++ b/src/Plugin/Field/FieldFormatter/ViewsReferenceFieldFormatter.php
+@@ -198,6 +198,6 @@
+       // only generate cacheable metadata from an array.
+       if (is_array($render_array)) {
+         $cacheable_metadata = CacheableMetadata::createFromRenderArray($render_array);
+-        $cacheability->merge($cacheable_metadata);
++        $cacheability = $cacheability->merge($cacheable_metadata);
+       }
+     }
