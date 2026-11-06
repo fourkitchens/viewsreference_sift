@@ -20,6 +20,7 @@
 - Rewired the Terms setting to resolve filters and normalize widget submissions.
 - Stores selections in a versioned format; values saved by 1.0.0-beta1 keep
   working.
+- Snapshots the server-set Terms selection before Views Reference runs.
 
 ### Added
 
