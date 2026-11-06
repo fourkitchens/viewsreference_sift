@@ -10,6 +10,8 @@
 - Added type information to the Terms setting and kernel test helpers.
 - Expanded CI to check the lowest tested Drupal 11 release, latest Drupal 11,
   and Drupal 12, with PHPStan and cspell.
+- Excluded static analysis, coding standards, and spell-check files from
+  package archives.
 
 ### Added
 
