@@ -21,6 +21,7 @@
 - Stores selections in a versioned format; values saved by 1.0.0-beta1 keep
   working.
 - Snapshots the server-set Terms selection before Views Reference runs.
+- Reloads the saved selection for Views AJAX when the field item can be found.
 
 ### Added
 

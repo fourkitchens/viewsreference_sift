@@ -5,3 +5,5 @@ services:
     autowire: true
   Drupal\viewsreference_sift\Selection\SelectionNormalizer:
     autowire: true
+  Drupal\viewsreference_sift\Selection\ValueSource:
+    autowire: true
