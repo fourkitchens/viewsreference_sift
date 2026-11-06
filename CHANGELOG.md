@@ -17,6 +17,7 @@
 - Extracted resolution of the first supported Views contextual filter.
 - Added selection value objects and normalization for saved term settings.
 - Extracted construction of Views arguments from term selections.
+- Rewired the Terms setting to resolve filters and normalize widget submissions.
 
 ### Added
 
