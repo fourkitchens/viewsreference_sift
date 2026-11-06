@@ -9,6 +9,11 @@ Views Reference Sift follows [Semantic Versioning][semver].
 
 - Adds a Drupal Help page with field and display setup instructions.
 
+### Fixed
+
+- Preserves a contextual filter's configured action when its value is
+  missing and a later filter has a Sift selection.
+
 ### Changed
 
 - Clarifies which Sift values come from the field or browser and why

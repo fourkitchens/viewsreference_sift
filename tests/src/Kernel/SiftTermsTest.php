@@ -399,26 +399,55 @@ class SiftTermsTest extends KernelTestBase {
   }
 
   /**
-   * Tests filling an empty leading argument with a default or exception.
+   * Tests filling an empty leading argument with a computed default.
    */
   public function testEmptyLeadingArgument(): void {
-    $ids = [$this->termIds['A']];
-    foreach ([FALSE, TRUE] as $fixed_default) {
-      $view = $this->viewWithArgumentSettings('/all', $ids);
-      if ($fixed_default) {
-        $arguments = $view->display_handler->getOption('arguments');
-        $arguments['nid']['default_action'] = 'default';
-        $arguments['nid']['default_argument_type'] = 'fixed';
-        $arguments['nid']['default_argument_options'] = ['argument' => $this->nodeIds['Both']];
-        $view->display_handler->overrideOption('arguments', $arguments);
-      }
+    $view = $this->viewWithArgumentSettings('/all', [$this->termIds['A']]);
+    $arguments = $view->display_handler->getOption('arguments');
+    $arguments['nid']['default_action'] = 'default';
+    $arguments['nid']['default_argument_type'] = 'fixed';
+    $arguments['nid']['default_argument_options'] = ['argument' => $this->nodeIds['Both']];
+    $view->display_handler->overrideOption('arguments', $arguments);
 
-      $view->preExecute();
-      $this->assertSame([$fixed_default ? $this->nodeIds['Both'] : 'all', (string) $ids[0]], $view->args);
-      $this->assertTrue($view->execute());
-      $view->postExecute();
-      $this->assertResultTitles($fixed_default ? ['Both'] : ['A', 'Both'], $view);
-    }
+    $view->preExecute();
+    $this->assertSame([$this->nodeIds['Both'], (string) $this->termIds['A']], $view->args);
+    $this->assertTrue($view->execute());
+    $view->postExecute();
+    $this->assertResultTitles(['Both'], $view);
+  }
+
+  /**
+   * Tests that an empty leading argument can still hide the view.
+   */
+  public function testEmptyLeadingArgumentHidesView(): void {
+    $view = $this->viewWithArgumentSettings('', [$this->termIds['A']], ['sift_terms']);
+    $arguments = $view->display_handler->getOption('arguments');
+    $arguments['nid']['default_action'] = 'not found';
+    $view->display_handler->overrideOption('arguments', $arguments);
+
+    $view->preExecute();
+    $this->assertFalse($view->execute());
+    $view->postExecute();
+    $this->assertTrue($view->build_info['fail']);
+    $this->assertSame([], $view->args);
+    $this->assertSame([], $view->result);
+  }
+
+  /**
+   * Tests that ignoring an empty leading argument allows the Sift filter.
+   */
+  public function testEmptyLeadingArgumentAllowsSiftWhenIgnored(): void {
+    $view = $this->viewWithArgumentSettings('', [$this->termIds['A']], ['sift_terms']);
+    $arguments = $view->display_handler->getOption('arguments');
+    $arguments['nid']['default_action'] = 'ignore';
+    $arguments['nid']['exception']['value'] = 'skip';
+    $view->display_handler->overrideOption('arguments', $arguments);
+
+    $view->preExecute();
+    $this->assertSame(['skip', (string) $this->termIds['A']], $view->args);
+    $this->assertTrue($view->execute());
+    $view->postExecute();
+    $this->assertResultTitles(['A', 'Both'], $view);
   }
 
   /**
