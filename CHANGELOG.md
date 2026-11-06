@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Resolves supported contextual filters with integer entity IDs in display
+  order.
+
 ## [1.0.0-beta2] - 2026-11-06
 
 ### Security
