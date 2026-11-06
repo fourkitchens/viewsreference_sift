@@ -1,0 +1,11 @@
+name: Views Reference Sift Test
+description: Provides embedded displays for testing the Terms setting.
+type: module
+package: Testing
+core_version_requirement: ^10.3 || ^11 || ^12
+hidden: true
+dependencies:
+  - drupal:node
+  - drupal:taxonomy
+  - drupal:views
+  - viewsreference_sift:viewsreference_sift
