@@ -1,0 +1,112 @@
+langcode: en
+status: true
+dependencies:
+  config:
+    - taxonomy.vocabulary.tags
+  module:
+    - node
+    - taxonomy
+id: viewsreference_sift_test
+label: Views Reference Sift Test
+module: views
+base_table: node_field_data
+base_field: nid
+display:
+  default:
+    display_plugin: default
+    id: default
+    display_title: Default
+    position: 0
+    display_options:
+      access:
+        type: none
+      cache:
+        type: none
+      query:
+        type: views_query
+        options:
+          distinct: true
+      pager:
+        type: none
+      style:
+        type: default
+      row:
+        type: fields
+      fields:
+        title:
+          id: title
+          table: node_field_data
+          field: title
+          entity_type: node
+          entity_field: title
+          plugin_id: field
+      sorts:
+        nid:
+          id: nid
+          table: node_field_data
+          field: nid
+          entity_type: node
+          entity_field: nid
+          plugin_id: standard
+          order: ASC
+      arguments: {  }
+  embed_terms:
+    display_plugin: embed
+    id: embed_terms
+    display_title: Terms
+    position: 1
+    display_options:
+      defaults:
+        arguments: false
+      arguments:
+        tid:
+          id: tid
+          table: taxonomy_index
+          field: tid
+          plugin_id: taxonomy_index_tid
+          break_phrase: true
+          default_action: ignore
+          exception:
+            value: all
+          specify_validation: true
+          validate:
+            type: 'entity:taxonomy_term'
+            fail: 'not found'
+          validate_options:
+            bundles:
+              tags: tags
+            multiple: 1
+  embed_depth:
+    display_plugin: embed
+    id: embed_depth
+    display_title: Terms with Depth
+    position: 2
+    display_options:
+      defaults:
+        arguments: false
+      arguments:
+        term_node_tid_depth:
+          id: term_node_tid_depth
+          table: node_field_data
+          field: term_node_tid_depth
+          entity_type: node
+          plugin_id: taxonomy_index_tid_depth
+          depth: 1
+          break_phrase: true
+          default_action: ignore
+          exception:
+            value: all
+          specify_validation: true
+          validate:
+            type: 'entity:taxonomy_term'
+            fail: 'not found'
+          validate_options:
+            bundles:
+              tags: tags
+            multiple: 1
+  embed_plain:
+    display_plugin: embed
+    id: embed_plain
+    display_title: Plain
+    position: 3
+    display_options: {  }
