@@ -33,6 +33,7 @@
 - Drops selected IDs that no longer exist or fall outside the allowed bundles.
 - Applies validated Sift selections after the other Views Reference settings.
 - Fills gaps in the argument list with the display's defaults or exceptions.
+- Uses a single-value Terms widget when the filter accepts one argument.
 
 ### Added
 
