@@ -1,5 +1,8 @@
 # Changelog
 
+This changelog follows [Keep a Changelog 1.1.0][keep-a-changelog].
+Views Reference Sift follows [Semantic Versioning][semver].
+
 ## [Unreleased]
 
 ## [1.0.0-beta3] - 2026-11-06
@@ -90,3 +93,10 @@
 - Any and All matching for the **Has taxonomy term ID** contextual filter.
 - Any matching for the **Has taxonomy term ID (with depth)** contextual filter.
 - AJAX pager and exposed form support that preserves selected terms.
+
+[keep-a-changelog]: https://keepachangelog.com/en/1.1.0/
+[semver]: https://semver.org/spec/v2.0.0.html
+[Unreleased]: https://github.com/fourkitchens/viewsreference_sift/compare/1.0.0-beta3...HEAD
+[1.0.0-beta3]: https://github.com/fourkitchens/viewsreference_sift/compare/1.0.0-beta2...1.0.0-beta3
+[1.0.0-beta2]: https://github.com/fourkitchens/viewsreference_sift/compare/1.0.0-beta1...1.0.0-beta2
+[1.0.0-beta1]: https://github.com/fourkitchens/viewsreference_sift/releases/tag/1.0.0-beta1
