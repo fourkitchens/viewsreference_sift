@@ -13,7 +13,7 @@ use Drupal\viewsreference_sift\Selection\Selection;
 final class ArgumentBuilder {
 
   /**
-   * Replaces the arguments when the first filter has selected IDs.
+   * Replaces the argument at the selected filter's position.
    *
    * @phpstan-param array<string, \Drupal\viewsreference_sift\Filter\SiftFilter> $filters
    * @phpstan-param list<string> $existing
@@ -30,7 +30,9 @@ final class ArgumentBuilder {
     }
 
     $delimiter = $filter->supportsAll && $value->match === MatchMode::All ? ',' : '+';
-    return [implode($delimiter, $value->ids)];
+    $existing[$filter->position] = implode($delimiter, $value->ids);
+    ksort($existing);
+    return array_values($existing);
   }
 
 }

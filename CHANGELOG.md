@@ -31,6 +31,7 @@
 - Adds cache tags for selected entities to the rendered View.
 - Caps each filter at 10 selections.
 - Drops selected IDs that no longer exist or fall outside the allowed bundles.
+- Applies validated Sift selections after the other Views Reference settings.
 
 ### Added
 

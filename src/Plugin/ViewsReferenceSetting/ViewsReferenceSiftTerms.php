@@ -11,7 +11,6 @@ use Drupal\Core\Plugin\ContainerFactoryPluginInterface;
 use Drupal\Core\StringTranslation\StringTranslationTrait;
 use Drupal\views\ViewExecutable;
 use Drupal\viewsreference\Plugin\ViewsReferenceSettingInterface;
-use Drupal\viewsreference_sift\Argument\ArgumentBuilder;
 use Drupal\viewsreference_sift\Filter\FilterResolver;
 use Drupal\viewsreference_sift\Selection\MatchMode;
 use Drupal\viewsreference_sift\Selection\Selection;
@@ -47,7 +46,6 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
     private readonly SelectionNormalizer $selectionNormalizer,
     private readonly SelectionValidator $selectionValidator,
     private readonly ValueSource $valueSource,
-    private readonly ArgumentBuilder $argumentBuilder,
   ) {
     parent::__construct($configuration, $plugin_id, $plugin_definition);
   }
@@ -67,7 +65,6 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
       $container->get(SelectionNormalizer::class),
       $container->get(SelectionValidator::class),
       $container->get(ValueSource::class),
-      $container->get(ArgumentBuilder::class),
     );
   }
 
@@ -129,6 +126,7 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
    * {@inheritdoc}
    */
   public function alterView(ViewExecutable $view, $value): void {
+    unset($view->element['#viewsreference_sift']['selection']);
     $filters = $this->filterResolver->forView($view);
     if (!$filters) {
       return;
@@ -140,9 +138,12 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
       $tags = Cache::buildTags($filters[$id]->entityTypeId, $selected->ids);
       $view->element['#cache']['tags'] = Cache::mergeTags($view->element['#cache']['tags'] ?? [], $tags);
     }
-    $arguments = $this->argumentBuilder->build($filters, $selection, $view->args);
-    if ($arguments !== $view->args) {
-      $view->setArguments($arguments);
+    if (!$selection->isEmpty()) {
+      $view->element['#viewsreference_sift']['selection'] = [
+        'data' => $this->selectionNormalizer->toStorage($selection),
+        'filter_ids' => array_keys($filters),
+        'display_id' => $view->current_display,
+      ];
     }
   }
 
