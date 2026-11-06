@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Security
+
+- Ignores Sift values from the query string outside Views AJAX requests.
+
 ### Changed
 
 - Requires Drupal 11.3 or later; Drupal 10 is no longer supported.
@@ -25,6 +29,8 @@
 - Preserves the display's validation failure action when every capped ID is
   invalid.
 - Adds cache tags for selected entities to the rendered View.
+- Caps each filter at 10 selections.
+- Drops selected IDs that no longer exist or fall outside the allowed bundles.
 
 ### Added
 
