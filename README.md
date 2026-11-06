@@ -11,6 +11,9 @@ One View display can serve multiple listings without extra fields or displays.
 - The Views and Taxonomy core modules.
 - Views Reference 2.0.0-beta14 or later in the 2.x series.
 
+Drupal 12 support depends on Views Reference providing an attribute class for
+setting discovery ([upstream issue #3583101](https://www.drupal.org/project/viewsreference/issues/3583101)).
+
 Run this command from your Drupal site's Composer project root.
 
 ```sh

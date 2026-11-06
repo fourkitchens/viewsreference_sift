@@ -13,6 +13,7 @@
 - Excluded static analysis, coding standards, and spell-check files from
   package archives.
 - Applied the Views Reference setting discovery patch in Drupal 12 CI.
+- Documented the Views Reference requirement for Drupal 12 setting discovery.
 
 ### Added
 
