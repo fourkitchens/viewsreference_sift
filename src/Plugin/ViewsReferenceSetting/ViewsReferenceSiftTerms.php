@@ -242,7 +242,7 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
   }
 
   /**
-   * Prepares the saved selection for the late Views hook to apply.
+   * Prepares a selection for the late Views hook to apply.
    *
    * Resolves and validates the selection before adding entity cache tags and
    * staging it for this display. The hook applies it after Views Reference has
