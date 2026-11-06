@@ -19,6 +19,7 @@ jobs:
           php-version: '8.3'
           coverage: none
       - run: composer validate --strict
+      - run: composer config --global repositories.drupal composer https://packages.drupal.org/8
       - run: composer install --no-interaction
       - run: vendor/bin/phpcs
       - run: git ls-files -- ':!LICENSE.txt' ':!tests/patches/*.patch' | npx --yes cspell@8.19.4 --no-progress --file-list stdin
@@ -38,7 +39,7 @@ jobs:
           composer config minimum-stability beta
           composer config prefer-stable true
           composer config repositories.viewsreference-sift path "$GITHUB_WORKSPACE"
-          composer require --no-interaction --with-all-dependencies 'fourkitchens/viewsreference_sift:*@dev' 'drupal/core-dev:^11'
+          composer require --no-interaction --with-all-dependencies 'drupal/viewsreference_sift:*@dev' 'drupal/core-dev:^11'
       - name: Run PHPStan
         working-directory: ${{ runner.temp }}/site
         run: vendor/bin/phpstan analyze --configuration=web/modules/contrib/viewsreference_sift/phpstan.neon.dist --no-progress
@@ -93,7 +94,7 @@ jobs:
             composer config preferred-install.drupal/core source
           fi
           composer require --no-interaction --with-all-dependencies \
-            'fourkitchens/viewsreference_sift:*@dev' \
+            'drupal/viewsreference_sift:*@dev' \
             "drupal/core-recommended:$DRUPAL_VERSION" \
             "drupal/core-composer-scaffold:$DRUPAL_VERSION" \
             "drupal/core-dev:$DRUPAL_VERSION" \
@@ -142,7 +143,7 @@ jobs:
           composer config minimum-stability beta
           composer config prefer-stable true
           composer config repositories.viewsreference-sift path "$GITHUB_WORKSPACE"
-          composer require --no-interaction --with-all-dependencies 'fourkitchens/viewsreference_sift:*@dev' 'drupal/core-dev:^11'
+          composer require --no-interaction --with-all-dependencies 'drupal/viewsreference_sift:*@dev' 'drupal/core-dev:^11'
       - name: Run functional and JavaScript tests
         working-directory: ${{ runner.temp }}/site
         env:

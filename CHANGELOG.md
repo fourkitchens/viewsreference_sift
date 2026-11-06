@@ -25,6 +25,7 @@ Views Reference Sift follows [Semantic Versioning][semver].
 
 - Clarifies which Sift values come from the field or browser and why
   contextual filters must never control access.
+- The Composer package is now `drupal/viewsreference_sift`.
 
 ### Security
 
