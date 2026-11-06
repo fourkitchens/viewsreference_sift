@@ -116,18 +116,57 @@ jobs:
           composer config allow-plugins.cweagans/composer-patches true
           composer require --dev --no-interaction 'cweagans/composer-patches:^2'
           composer patches-repatch --no-interaction
-      - name: Run tests
+      - name: Run unit and kernel tests
         working-directory: ${{ runner.temp }}/site
         env:
           SIMPLETEST_DB: sqlite://localhost/${{ runner.temp }}/test.sqlite
-          SIMPLETEST_BASE_URL: http://127.0.0.1:8080
           BROWSERTEST_OUTPUT_DIRECTORY: ${{ runner.temp }}
         run: |
-          php -S 127.0.0.1:8080 -t "$PWD/web" "$PWD/web/.ht.router.php" > "$RUNNER_TEMP/php-server.log" 2>&1 &
+          vendor/bin/phpunit -c web/core --display-deprecations \
+            web/modules/contrib/viewsreference_sift/tests/src/Unit \
+            web/modules/contrib/viewsreference_sift/tests/src/Kernel
+
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: pdo_sqlite
+          coverage: none
+      - name: Install Drupal and browser test dependencies
+        run: |
+          composer create-project 'drupal/recommended-project:^11' "$RUNNER_TEMP/site" --no-install --no-interaction
+          cd "$RUNNER_TEMP/site"
+          composer config minimum-stability beta
+          composer config prefer-stable true
+          composer config repositories.viewsreference-sift path "$GITHUB_WORKSPACE"
+          composer require --no-interaction --with-all-dependencies 'fourkitchens/viewsreference_sift:*@dev' 'drupal/core-dev:^11'
+      - name: Run functional and JavaScript tests
+        working-directory: ${{ runner.temp }}/site
+        env:
+          SIMPLETEST_DB: sqlite://localhost/${{ runner.temp }}/browser.sqlite
+          SIMPLETEST_BASE_URL: http://127.0.0.1:8080
+          BROWSERTEST_OUTPUT_DIRECTORY: ${{ runner.temp }}/site/web/sites/simpletest/browser_output
+          MINK_DRIVER_ARGS_WEBDRIVER: >-
+            ["chrome", {"goog:chromeOptions": {"w3c": true, "args": ["--headless=new", "--no-sandbox", "--window-size=1280,1024"]}}, "http://127.0.0.1:4444"]
+        # cspell:ignore chromedriver
+        run: |
+          mkdir -p "$BROWSERTEST_OUTPUT_DIRECTORY"
+          (cd web && exec php -S 127.0.0.1:8080 .ht.router.php) > "$BROWSERTEST_OUTPUT_DIRECTORY/php-server.log" 2>&1 &
           server_pid=$!
-          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
-          if ! curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 1 --output /dev/null "$SIMPLETEST_BASE_URL"; then
-            cat "$RUNNER_TEMP/php-server.log"
-            exit 1
-          fi
-          vendor/bin/phpunit -c web/core --display-deprecations web/modules/contrib/viewsreference_sift
+          chromedriver --port=4444 > "$BROWSERTEST_OUTPUT_DIRECTORY/chromedriver.log" 2>&1 &
+          driver_pid=$!
+          trap 'kill "$server_pid" "$driver_pid" 2>/dev/null || true' EXIT
+          curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 1 --output /dev/null "$SIMPLETEST_BASE_URL"
+          curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 1 --output /dev/null http://127.0.0.1:4444/status
+          vendor/bin/phpunit -c web/core --display-deprecations \
+            web/modules/contrib/viewsreference_sift/tests/src/Functional \
+            web/modules/contrib/viewsreference_sift/tests/src/FunctionalJavascript
+      - name: Upload browser output
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-test-output
+          path: ${{ runner.temp }}/site/web/sites/simpletest/browser_output
