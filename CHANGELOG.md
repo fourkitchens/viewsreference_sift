@@ -18,6 +18,8 @@ Views Reference Sift follows [Semantic Versioning][semver].
   missing and a later filter has a Sift selection.
 - Uses singular wording in the validation error when a Sift filter allows
   at most one item.
+- Skips automatic extender enablement during configuration imports and
+  leaves individual View settings to the import on uninstall.
 
 ### Changed
 
