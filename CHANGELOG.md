@@ -12,6 +12,7 @@
   and Drupal 12, with PHPStan and cspell.
 - Excluded static analysis, coding standards, and spell-check files from
   package archives.
+- Applied the Views Reference setting discovery patch in Drupal 12 CI.
 
 ### Added
 

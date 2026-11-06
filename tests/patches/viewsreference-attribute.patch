@@ -1,0 +1,168 @@
+From dcef60f792b32c17c926d0ba6a4a99c480821f5b Mon Sep 17 00:00:00 2001
+From: Callin Mullaney <57088-callinmullaney@users.noreply.drupalcode.org>
+Date: Fri, 6 Nov 2026 09:25:35 -0600
+Subject: [PATCH] fix: support attribute discovery for Views Reference settings
+
+---
+ src/Attribute/ViewsReferenceSetting.php       | 37 +++++++++++++++++++
+ .../ViewsReferenceArgument.php                |  3 ++
+ .../ViewsReferenceHeader.php                  |  3 ++
+ .../ViewsReferenceLimit.php                   |  3 ++
+ .../ViewsReferenceOffset.php                  |  3 ++
+ .../ViewsReferencePager.php                   |  3 ++
+ .../ViewsReferenceTitle.php                   |  3 ++
+ src/Plugin/ViewsReferenceSettingManager.php   |  9 ++++-
+ 8 files changed, 63 insertions(+), 1 deletion(-)
+ create mode 100644 src/Attribute/ViewsReferenceSetting.php
+
+diff --git a/src/Attribute/ViewsReferenceSetting.php b/src/Attribute/ViewsReferenceSetting.php
+new file mode 100644
+index 0000000..f4342ad
+--- /dev/null
++++ b/src/Attribute/ViewsReferenceSetting.php
+@@ -0,0 +1,37 @@
++<?php
++
++namespace Drupal\viewsreference\Attribute;
++
++use Drupal\Component\Plugin\Attribute\Plugin;
++use Drupal\Core\StringTranslation\TranslatableMarkup;
++
++/**
++ * Defines a Views Reference setting plugin attribute.
++ *
++ * @see \Drupal\viewsreference\Plugin\ViewsReferenceSettingManager
++ */
++#[\Attribute(\Attribute::TARGET_CLASS)]
++class ViewsReferenceSetting extends Plugin {
++
++  /**
++   * Constructs a Views Reference setting attribute.
++   *
++   * @param string $id
++   *   The plugin ID.
++   * @param \Drupal\Core\StringTranslation\TranslatableMarkup|null $label
++   *   (optional) The label of the plugin.
++   * @param mixed $default_value
++   *   (optional) The field default value.
++   * @param class-string|null $deriver
++   *   (optional) The deriver class.
++   */
++  public function __construct(
++    string $id,
++    public readonly ?TranslatableMarkup $label = NULL,
++    public readonly mixed $default_value = '',
++    ?string $deriver = NULL,
++  ) {
++    parent::__construct($id, $deriver);
++  }
++
++}
+diff --git a/src/Plugin/ViewsReferenceSetting/ViewsReferenceArgument.php b/src/Plugin/ViewsReferenceSetting/ViewsReferenceArgument.php
+index 4d122a5..34d783c 100644
+--- a/src/Plugin/ViewsReferenceSetting/ViewsReferenceArgument.php
++++ b/src/Plugin/ViewsReferenceSetting/ViewsReferenceArgument.php
+@@ -8,2 +8,3 @@ use Drupal\Core\Routing\CurrentRouteMatch;
+ use Drupal\Core\StringTranslation\StringTranslationTrait;
++use Drupal\Core\StringTranslation\TranslatableMarkup;
+ use Drupal\Core\Utility\Token;
+@@ -11,2 +12,3 @@ use Drupal\views\Views;
+ use Drupal\views\ViewExecutable;
++use Drupal\viewsreference\Attribute\ViewsReferenceSetting;
+ use Drupal\viewsreference\Plugin\ViewsReferenceSettingInterface;
+@@ -23,2 +25,3 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
+  */
++#[ViewsReferenceSetting(id: 'argument', label: new TranslatableMarkup('Argument'))]
+ class ViewsReferenceArgument extends PluginBase implements ViewsReferenceSettingInterface, ContainerFactoryPluginInterface {
+diff --git a/src/Plugin/ViewsReferenceSetting/ViewsReferenceHeader.php b/src/Plugin/ViewsReferenceSetting/ViewsReferenceHeader.php
+index 06a51cd..38269c3 100644
+--- a/src/Plugin/ViewsReferenceSetting/ViewsReferenceHeader.php
++++ b/src/Plugin/ViewsReferenceSetting/ViewsReferenceHeader.php
+@@ -6,3 +6,5 @@ use Drupal\Component\Plugin\PluginBase;
+ use Drupal\Core\StringTranslation\StringTranslationTrait;
++use Drupal\Core\StringTranslation\TranslatableMarkup;
+ use Drupal\views\ViewExecutable;
++use Drupal\viewsreference\Attribute\ViewsReferenceSetting;
+ use Drupal\viewsreference\Plugin\ViewsReferenceSettingInterface;
+@@ -18,2 +20,3 @@ use Drupal\viewsreference\Plugin\ViewsReferenceSettingInterface;
+  */
++#[ViewsReferenceSetting(id: 'header', label: new TranslatableMarkup('Hide header'), default_value: FALSE)]
+ class ViewsReferenceHeader extends PluginBase implements ViewsReferenceSettingInterface {
+diff --git a/src/Plugin/ViewsReferenceSetting/ViewsReferenceLimit.php b/src/Plugin/ViewsReferenceSetting/ViewsReferenceLimit.php
+index 5c3e560..7d7bb7b 100644
+--- a/src/Plugin/ViewsReferenceSetting/ViewsReferenceLimit.php
++++ b/src/Plugin/ViewsReferenceSetting/ViewsReferenceLimit.php
+@@ -6,3 +6,5 @@ use Drupal\Component\Plugin\PluginBase;
+ use Drupal\Core\StringTranslation\StringTranslationTrait;
++use Drupal\Core\StringTranslation\TranslatableMarkup;
+ use Drupal\views\ViewExecutable;
++use Drupal\viewsreference\Attribute\ViewsReferenceSetting;
+ use Drupal\viewsreference\Plugin\ViewsReferenceSettingInterface;
+@@ -18,2 +20,3 @@ use Drupal\viewsreference\Plugin\ViewsReferenceSettingInterface;
+  */
++#[ViewsReferenceSetting(id: 'limit', label: new TranslatableMarkup('Limit results'))]
+ class ViewsReferenceLimit extends PluginBase implements ViewsReferenceSettingInterface {
+diff --git a/src/Plugin/ViewsReferenceSetting/ViewsReferenceOffset.php b/src/Plugin/ViewsReferenceSetting/ViewsReferenceOffset.php
+index 3b190dd..cb5a9ff 100644
+--- a/src/Plugin/ViewsReferenceSetting/ViewsReferenceOffset.php
++++ b/src/Plugin/ViewsReferenceSetting/ViewsReferenceOffset.php
+@@ -6,3 +6,5 @@ use Drupal\Component\Plugin\PluginBase;
+ use Drupal\Core\StringTranslation\StringTranslationTrait;
++use Drupal\Core\StringTranslation\TranslatableMarkup;
+ use Drupal\views\ViewExecutable;
++use Drupal\viewsreference\Attribute\ViewsReferenceSetting;
+ use Drupal\viewsreference\Plugin\ViewsReferenceSettingInterface;
+@@ -18,2 +20,3 @@ use Drupal\viewsreference\Plugin\ViewsReferenceSettingInterface;
+  */
++#[ViewsReferenceSetting(id: 'offset', label: new TranslatableMarkup('Offset results'))]
+ class ViewsReferenceOffset extends PluginBase implements ViewsReferenceSettingInterface {
+diff --git a/src/Plugin/ViewsReferenceSetting/ViewsReferencePager.php b/src/Plugin/ViewsReferenceSetting/ViewsReferencePager.php
+index feb7ccb..14b8e54 100644
+--- a/src/Plugin/ViewsReferenceSetting/ViewsReferencePager.php
++++ b/src/Plugin/ViewsReferenceSetting/ViewsReferencePager.php
+@@ -6,3 +6,5 @@ use Drupal\Component\Plugin\PluginBase;
+ use Drupal\Core\StringTranslation\StringTranslationTrait;
++use Drupal\Core\StringTranslation\TranslatableMarkup;
+ use Drupal\views\ViewExecutable;
++use Drupal\viewsreference\Attribute\ViewsReferenceSetting;
+ use Drupal\viewsreference\Plugin\ViewsReferenceSettingInterface;
+@@ -18,2 +20,3 @@ use Drupal\viewsreference\Plugin\ViewsReferenceSettingInterface;
+  */
++#[ViewsReferenceSetting(id: 'pager', label: new TranslatableMarkup('Pagination'))]
+ class ViewsReferencePager extends PluginBase implements ViewsReferenceSettingInterface {
+diff --git a/src/Plugin/ViewsReferenceSetting/ViewsReferenceTitle.php b/src/Plugin/ViewsReferenceSetting/ViewsReferenceTitle.php
+index ecafc07..a277beb 100644
+--- a/src/Plugin/ViewsReferenceSetting/ViewsReferenceTitle.php
++++ b/src/Plugin/ViewsReferenceSetting/ViewsReferenceTitle.php
+@@ -6,3 +6,5 @@ use Drupal\Component\Plugin\PluginBase;
+ use Drupal\Core\StringTranslation\StringTranslationTrait;
++use Drupal\Core\StringTranslation\TranslatableMarkup;
+ use Drupal\views\ViewExecutable;
++use Drupal\viewsreference\Attribute\ViewsReferenceSetting;
+ use Drupal\viewsreference\Plugin\ViewsReferenceSettingInterface;
+@@ -18,2 +20,3 @@ use Drupal\viewsreference\Plugin\ViewsReferenceSettingInterface;
+  */
++#[ViewsReferenceSetting(id: 'title', label: new TranslatableMarkup('Include View Title'), default_value: FALSE)]
+ class ViewsReferenceTitle extends PluginBase implements ViewsReferenceSettingInterface {
+diff --git a/src/Plugin/ViewsReferenceSettingManager.php b/src/Plugin/ViewsReferenceSettingManager.php
+index e85a7e4..54b3ac6 100644
+--- a/src/Plugin/ViewsReferenceSettingManager.php
++++ b/src/Plugin/ViewsReferenceSettingManager.php
+@@ -7,2 +7,5 @@ use Drupal\Core\Extension\ModuleHandlerInterface;
+ use Drupal\Core\Plugin\DefaultPluginManager;
++use Drupal\Core\Plugin\Discovery\AttributeDiscoveryWithAnnotations;
++use Drupal\viewsreference\Annotation\ViewsReferenceSetting as ViewsReferenceSettingAnnotation;
++use Drupal\viewsreference\Attribute\ViewsReferenceSetting;
+ 
+@@ -25,3 +28,7 @@ class ViewsReferenceSettingManager extends DefaultPluginManager {
+   public function __construct(\Traversable $namespaces, CacheBackendInterface $cache_backend, ModuleHandlerInterface $module_handler) {
+-    parent::__construct('Plugin/ViewsReferenceSetting', $namespaces, $module_handler, 'Drupal\viewsreference\Plugin\ViewsReferenceSettingInterface', 'Drupal\viewsreference\Annotation\ViewsReferenceSetting');
++    // Drupal 10.0 and 10.1 expect the annotation as the fifth argument.
++    $discovery_classes = class_exists(AttributeDiscoveryWithAnnotations::class)
++      ? [ViewsReferenceSetting::class, ViewsReferenceSettingAnnotation::class]
++      : [ViewsReferenceSettingAnnotation::class];
++    parent::__construct('Plugin/ViewsReferenceSetting', $namespaces, $module_handler, ViewsReferenceSettingInterface::class, ...$discovery_classes);
+ 
+-- 
+2.56.0
+
