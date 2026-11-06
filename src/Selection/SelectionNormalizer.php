@@ -41,9 +41,9 @@ final class SelectionNormalizer {
     }
 
     $selections = [];
-    foreach (array_keys($filters) as $filter_id) {
+    foreach ($filters as $filter_id => $filter) {
       $stored = $stored_filters[$filter_id] ?? NULL;
-      if (!is_array($stored) || !is_array($stored['ids'] ?? NULL)) {
+      if (!$filter->enabled || !is_array($stored) || !is_array($stored['ids'] ?? NULL)) {
         continue;
       }
 
@@ -54,7 +54,7 @@ final class SelectionNormalizer {
 
       $match = $stored['match'] ?? NULL;
       $mode = is_string($match) ? MatchMode::tryFrom($match) : NULL;
-      $selections[$filter_id] = new FilterSelection($ids, $mode ?? MatchMode::Any);
+      $selections[$filter_id] = new FilterSelection($ids, $filter->resolveMatch($mode ?? MatchMode::Any));
     }
     return new Selection($selections);
   }

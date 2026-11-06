@@ -37,15 +37,26 @@ final class FilterResolver {
   /**
    * Resolves eligible filters for the active display in argument order.
    *
+   * @param \Drupal\views\ViewExecutable $view
+   *   The view whose active display to resolve.
+   * @param bool $include_disabled
+   *   Keep disabled filters in place when reading legacy selections.
+   *
    * @return \Drupal\viewsreference_sift\Filter\SiftFilter[]
    *   The filters keyed by argument handler ID.
    *
    * @phpstan-return array<string, SiftFilter>
    */
-  public function forView(ViewExecutable $view): array {
+  public function forView(ViewExecutable $view, bool $include_disabled = FALSE): array {
     /** @var \Drupal\views\Plugin\views\display\DisplayPluginBase|null $display */
     $display = $view->display_handler;
-    return $display ? $this->supportedFilters($display) : [];
+    if (!$display) {
+      return [];
+    }
+    /** @var array<string, array<string, mixed>> $settings */
+    $settings = $display->getOption('display_extenders')['viewsreference_sift']['filters'] ?? [];
+    $filters = $this->resolve($display, $settings);
+    return $include_disabled ? $filters : array_filter($filters, static fn (SiftFilter $filter): bool => $filter->enabled);
   }
 
   /**
@@ -57,6 +68,16 @@ final class FilterResolver {
    * @phpstan-return array<string, SiftFilter>
    */
   public function supportedFilters(DisplayPluginBase $display): array {
+    return $this->resolve($display, []);
+  }
+
+  /**
+   * Resolves contextual filters and overlays saved settings.
+   *
+   * @phpstan-param array<string, array<string, mixed>> $settings
+   * @phpstan-return array<string, SiftFilter>
+   */
+  private function resolve(DisplayPluginBase $display, array $settings): array {
     /** @var array<string, \Drupal\views\Plugin\views\ViewsHandlerInterface> $handlers */
     $handlers = $display->getHandlers('argument');
 
@@ -100,6 +121,18 @@ final class FilterResolver {
       if ($label === '' && count($bundles) === 1) {
         $label = $this->entityTypeBundleInfo->getBundleInfo($entity_type_id)[$bundles[0]]['label'] ?? '';
       }
+      $configured = ($settings[$id] ?? []) + SiftFilter::DEFAULT_OPTIONS;
+      $label = (string) $configured['label'] !== '' ? (string) $configured['label'] : $label;
+      $enabled = (bool) $configured['enabled'];
+      $validator_bundles = $bundles;
+      if (is_array($configured['bundles']) && $configured['bundles'] !== [] && $entity_type->getKey('bundle') !== FALSE) {
+        $allowed = $bundles ?: array_keys($this->entityTypeBundleInfo->getBundleInfo($entity_type_id));
+        $bundles = array_values(array_intersect($allowed, $configured['bundles']));
+        // No intersection must not widen the widget to every bundle.
+        $enabled = $enabled && $bundles !== [];
+      }
+      $match = $configured['match'];
+      $widget = $configured['widget'];
       $filters[$id] = new SiftFilter(
         id: $id,
         pluginId: $plugin_id,
@@ -111,6 +144,13 @@ final class FilterResolver {
         exceptionValue: $options['exception']['value'] ?? 'all',
         defaultAction: $options['default_action'] ?? 'ignore',
         label: $label !== '' ? $label : $entity_type->getPluralLabel(),
+        enabled: $enabled,
+        description: (string) $configured['description'],
+        matchPolicy: in_array($match, ['editor', 'any', 'all'], TRUE) ? $match : 'editor',
+        widget: in_array($widget, ['autocomplete', 'checkboxes', 'select'], TRUE) ? $widget : 'autocomplete',
+        max: min(SiftFilter::MAX_LIMIT, max(1, (int) $configured['max'])),
+        required: (bool) $configured['required'],
+        narrowsBundles: $bundles !== $validator_bundles,
       );
     }
     return $filters;
@@ -119,12 +159,19 @@ final class FilterResolver {
   /**
    * Resolves eligible filters for a configured view and display.
    *
+   * @param string $view_id
+   *   The machine name of the view.
+   * @param string $display_id
+   *   The machine name of the display.
+   * @param bool $include_disabled
+   *   Keep disabled filters in place when reading legacy selections.
+   *
    * @return \Drupal\viewsreference_sift\Filter\SiftFilter[]
    *   The filters keyed by argument handler ID.
    *
    * @phpstan-return array<string, SiftFilter>
    */
-  public function forDisplay(string $view_id, string $display_id): array {
+  public function forDisplay(string $view_id, string $display_id, bool $include_disabled = FALSE): array {
     if ($view_id === '' || $display_id === '') {
       return [];
     }
@@ -134,7 +181,7 @@ final class FilterResolver {
     }
 
     $view = $this->executableFactory->get($view_entity);
-    return $view->setDisplay($display_id) ? $this->forView($view) : [];
+    return $view->setDisplay($display_id) ? $this->forView($view, $include_disabled) : [];
   }
 
 }

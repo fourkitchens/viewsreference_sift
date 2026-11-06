@@ -6,7 +6,6 @@ namespace Drupal\viewsreference_sift\Selection;
 
 use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
-use Drupal\viewsreference_sift\Filter\SiftFilter;
 
 /**
  * Caps selections and checks whether their IDs match the filter definitions.
@@ -23,7 +22,7 @@ final class SelectionValidator {
   /**
    * Keeps existing IDs in allowed bundles, within the per-filter limit.
    *
-   * @phpstan-param array<string, SiftFilter> $filters
+   * @phpstan-param array<string, \Drupal\viewsreference_sift\Filter\SiftFilter> $filters
    */
   public function validate(Selection $selection, array $filters): Selection {
     $capped = [];
@@ -33,7 +32,7 @@ final class SelectionValidator {
         continue;
       }
 
-      $limit = $filters[$id]->multiple ? SiftFilter::DEFAULT_MAX : 1;
+      $limit = $filters[$id]->multiple ? $filters[$id]->max : 1;
       $capped[$id] = new FilterSelection(array_slice($selected->ids, 0, $limit), $selected->match);
       $by_type[$filters[$id]->entityTypeId][$id] = $capped[$id];
     }
@@ -41,15 +40,15 @@ final class SelectionValidator {
     foreach ($by_type as $entity_type_id => $selections) {
       $capped = array_replace($capped, $this->validateType($entity_type_id, $selections, $filters));
     }
-    return new Selection($capped);
+    return new Selection(array_filter($capped));
   }
 
   /**
    * Queries all capped selections for one entity type together.
    *
    * @phpstan-param array<string, FilterSelection> $selections
-   * @phpstan-param array<string, SiftFilter> $filters
-   * @phpstan-return array<string, FilterSelection>
+   * @phpstan-param array<string, \Drupal\viewsreference_sift\Filter\SiftFilter> $filters
+   * @phpstan-return array<string, FilterSelection|null>
    */
   private function validateType(string $entity_type_id, array $selections, array $filters): array {
     $entity_type = $this->entityTypeManager->getDefinition($entity_type_id);
@@ -76,15 +75,12 @@ final class SelectionValidator {
     }
 
     $existing_ids = $query->condition($conditions)->execute();
-    if ($existing_ids === []) {
-      return $selections;
-    }
-
     // A match for one filter may be in a bundle excluded by another filter.
     $bundles_by_id = $check_bundles
       ? array_map(static fn (EntityInterface $entity): string => $entity->bundle(), $storage->loadMultiple($existing_ids))
       : NULL;
     $existing = array_map('strval', $existing_ids);
+    $validated = [];
     foreach ($selections as $id => $selected) {
       $bundles = $filters[$id]->bundles;
       $valid = array_values(array_filter($selected->ids, static fn (int $entity_id): bool =>
@@ -92,12 +88,12 @@ final class SelectionValidator {
         && ($bundles_by_id === NULL || $bundles === [] || in_array($bundles_by_id[$entity_id] ?? NULL, $bundles, TRUE))
       ));
 
-      // Preserve Views' validation failure action if no supplied IDs survive.
-      if ($valid !== []) {
-        $selections[$id] = new FilterSelection($valid, $selected->match);
-      }
+      // Views can handle invalid IDs only for restrictions it knows about.
+      $validated[$id] = $valid !== []
+        ? new FilterSelection($valid, $selected->match)
+        : ($filters[$id]->narrowsBundles ? NULL : $selected);
     }
-    return $selections;
+    return $validated;
   }
 
 }

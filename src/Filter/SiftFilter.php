@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Drupal\viewsreference_sift\Filter;
 
 use Drupal\Core\StringTranslation\TranslatableMarkup;
+use Drupal\viewsreference_sift\Selection\MatchMode;
 
 /**
  * Describes an eligible contextual filter on a Views display.
@@ -48,6 +49,20 @@ final readonly class SiftFilter {
    *   The Views action to take when the argument is missing.
    * @param string|\Drupal\Core\StringTranslation\TranslatableMarkup $label
    *   The display label for the filter.
+   * @param bool $enabled
+   *   Whether this filter participates in Sift.
+   * @param string $description
+   *   The optional help text for the editor.
+   * @param string $matchPolicy
+   *   The configured match policy.
+   * @param string $widget
+   *   The configured widget type.
+   * @param int $max
+   *   The maximum number of selected IDs for a multiple-value filter.
+   * @param bool $required
+   *   Whether the editor must select a value.
+   * @param bool $narrowsBundles
+   *   Whether the display settings further restrict the Views bundles.
    *
    * @phpstan-param list<string> $bundles
    */
@@ -62,6 +77,24 @@ final readonly class SiftFilter {
     public string $exceptionValue,
     public string $defaultAction,
     public string|TranslatableMarkup $label,
+    public bool $enabled = TRUE,
+    public string $description = '',
+    public string $matchPolicy = 'editor',
+    public string $widget = 'autocomplete',
+    public int $max = self::DEFAULT_MAX,
+    public bool $required = FALSE,
+    public bool $narrowsBundles = FALSE,
   ) {}
+
+  /**
+   * Applies the display's match policy to a selection.
+   */
+  public function resolveMatch(MatchMode $editor_choice): MatchMode {
+    return match ($this->matchPolicy) {
+      'any' => MatchMode::Any,
+      'all' => $this->supportsAll ? MatchMode::All : MatchMode::Any,
+      default => $editor_choice,
+    };
+  }
 
 }
