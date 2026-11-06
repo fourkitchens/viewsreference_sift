@@ -15,6 +15,7 @@ use Drupal\viewsreference_sift\Filter\FilterResolver;
 use Drupal\viewsreference_sift\Selection\MatchMode;
 use Drupal\viewsreference_sift\Selection\Selection;
 use Drupal\viewsreference_sift\Selection\SelectionNormalizer;
+use Drupal\viewsreference_sift\Selection\SelectionValidator;
 use Drupal\viewsreference_sift\Selection\ValueSource;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
@@ -43,6 +44,7 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
     private readonly EntityTypeManagerInterface $entityTypeManager,
     private readonly FilterResolver $filterResolver,
     private readonly SelectionNormalizer $selectionNormalizer,
+    private readonly SelectionValidator $selectionValidator,
     private readonly ValueSource $valueSource,
     private readonly ArgumentBuilder $argumentBuilder,
   ) {
@@ -62,6 +64,7 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
       $container->get('entity_type.manager'),
       $container->get(FilterResolver::class),
       $container->get(SelectionNormalizer::class),
+      $container->get(SelectionValidator::class),
       $container->get(ValueSource::class),
       $container->get(ArgumentBuilder::class),
     );
@@ -131,6 +134,7 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
     }
     $value = $this->valueSource->resolve($view, $value);
     $selection = $this->selectionNormalizer->fromStorage($value, $filters);
+    $selection = $this->selectionValidator->validate($selection, $filters);
     $arguments = $this->argumentBuilder->build($filters, $selection, $view->args);
     if ($arguments !== $view->args) {
       $view->setArguments($arguments);

@@ -11,6 +11,8 @@ use Drupal\Core\StringTranslation\TranslatableMarkup;
  */
 final readonly class SiftFilter {
 
+  public const DEFAULT_MAX = 10;
+
   /**
    * Constructs a Sift filter description.
    *

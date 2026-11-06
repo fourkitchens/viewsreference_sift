@@ -22,6 +22,7 @@
   working.
 - Snapshots the server-set Terms selection before Views Reference runs.
 - Reloads the saved selection for Views AJAX when the field item can be found.
+- Preserves the display's validation failure action when every capped ID is invalid.
 
 ### Added
 
