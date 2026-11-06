@@ -59,10 +59,10 @@ jobs:
           - name: latest-11
             drupal: '^11'
             php: '8.4'
-          - name: drupal-12
+          - name: drupal-12 (pending upstream)
             drupal: '^12.0@beta'
             php: '8.5'
-            # Keep this non-blocking until the Views Reference fix lands upstream.
+            # Make this blocking and restore ^12 once it passes without the Views Reference patches.
             experimental: true
     steps:
       - uses: actions/checkout@v4
@@ -80,7 +80,7 @@ jobs:
           key: ${{ runner.os }}-composer-${{ matrix.name }}-php${{ matrix.php }}-${{ hashFiles('composer.json', '.github/workflows/ci.yml') }}
       - name: Install Drupal and test dependencies
         env:
-          MATRIX_NAME: ${{ matrix.name }}
+          EXPERIMENTAL: ${{ matrix.experimental == true }}
           DRUPAL_VERSION: ${{ matrix.drupal }}
           VIEWSREFERENCE_VERSION: ${{ matrix.viewsreference || '*' }}
         run: |
@@ -89,7 +89,12 @@ jobs:
           composer config minimum-stability beta
           composer config prefer-stable true
           composer config repositories.viewsreference-sift path "$GITHUB_WORKSPACE"
-          if [ "$MATRIX_NAME" = drupal-12 ]; then
+          if [ "$EXPERIMENTAL" = true ]; then
+            # Allow Drupal 12 only in the disposable CI checkout.
+            composer --working-dir="$GITHUB_WORKSPACE" require --no-update "drupal/core:$DRUPAL_VERSION"
+            sed -i 's/^core_version_requirement: .*/core_version_requirement: ^12/' \
+              "$GITHUB_WORKSPACE/viewsreference_sift.info.yml" \
+              "$GITHUB_WORKSPACE/tests/modules/viewsreference_sift_test/viewsreference_sift_test.info.yml"
             # Drupal 12 release archives omit the test bootstrap.
             composer config preferred-install.drupal/core source
           fi
@@ -99,17 +104,19 @@ jobs:
             "drupal/core-composer-scaffold:$DRUPAL_VERSION" \
             "drupal/core-dev:$DRUPAL_VERSION" \
             "drupal/viewsreference:$VIEWSREFERENCE_VERSION"
-      - name: Apply the Views Reference discovery patch
-        if: matrix.name == 'drupal-12'
+      - name: Apply the Views Reference test patches
+        if: matrix.experimental == true
         working-directory: ${{ runner.temp }}/site
         # cspell:ignore cweagans repatch
         run: |
-          cp "$GITHUB_WORKSPACE/tests/patches/viewsreference-attribute.patch" .
+          cp "$GITHUB_WORKSPACE/tests/patches/viewsreference-attribute.patch" \
+            "$GITHUB_WORKSPACE/tests/patches/viewsreference-cacheability.patch" .
           cat > patches.json <<'EOF'
           {
             "patches": {
               "drupal/viewsreference": {
-                "Support setting attribute discovery": "viewsreference-attribute.patch"
+                "Support setting attribute discovery": "viewsreference-attribute.patch",
+                "Use the merged cache metadata on PHP 8.5": "viewsreference-cacheability.patch"
               }
             }
           }
@@ -120,9 +127,15 @@ jobs:
       - name: Run unit and kernel tests
         working-directory: ${{ runner.temp }}/site
         env:
+          EXPERIMENTAL: ${{ matrix.experimental == true }}
           SIMPLETEST_DB: sqlite://localhost/${{ runner.temp }}/test.sqlite
           BROWSERTEST_OUTPUT_DIRECTORY: ${{ runner.temp }}
         run: |
+          if [ "$EXPERIMENTAL" = true ] &&
+            composer show --locked drupal/core 12.0.0-beta2 --quiet 2>/dev/null; then
+            # Drupal core #3634044 fixes the debug loader after beta 2.
+            export DRUPAL_DEPRECATION_FILTER_CONFIG='{"enableDebugClassLoader":false}'
+          fi
           vendor/bin/phpunit -c web/core --display-deprecations \
             web/modules/contrib/viewsreference_sift/tests/src/Unit \
             web/modules/contrib/viewsreference_sift/tests/src/Kernel

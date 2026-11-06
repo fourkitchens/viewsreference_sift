@@ -15,17 +15,21 @@ ddev poser
 ddev symlink-project
 ```
 
-To switch the local project to Drupal 12, set `php_version: "8.5"` in
-`.ddev/config.yaml` and run these commands.
+## Experimental Drupal 12 testing
 
-```sh
-ddev restart
-ddev core-version '^12'
-ddev poser
-```
+Use PHP 8.5 with the SQLite PDO extension and a disposable copy of this
+checkout. Follow the `drupal-12 (pending upstream)` job's dependency, patch,
+and test steps. Set `GITHUB_WORKSPACE` to the disposable checkout and
+`RUNNER_TEMP` to a writable temporary directory. Use `EXPERIMENTAL=true`,
+`DRUPAL_VERSION='^12.0@beta'`, and `VIEWSREFERENCE_VERSION='*'`. The job
+widens Sift's core requirements for testing and installs Drupal core from
+source to include its test bootstrap. Use `RUNNER_TEMP` in place of
+`${{ runner.temp }}` for the test paths and SQLite database.
+[CI workflow](.github/workflows/ci.yml)
 
-Drupal 12 tests also need Views Reference's attribute discovery fix. The
-[CI workflow](.github/workflows/ci.yml) shows the patch used for those tests.
+The job applies patches for Views Reference setting discovery and a PHP 8.5
+formatter warning. Drupal 12 support depends on the upstream discovery fix.
+[Views Reference issue #3583101](https://www.drupal.org/project/viewsreference/issues/3583101)
 
 ## Run checks
 

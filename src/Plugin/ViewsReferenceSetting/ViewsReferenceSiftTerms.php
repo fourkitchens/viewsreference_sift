@@ -30,6 +30,10 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
 /**
  * Lets editors narrow an embedded view through its contextual filters.
  *
+ * @todo Convert the setting to an attribute after Views Reference releases
+ *   its discovery fix.
+ *   https://www.drupal.org/project/viewsreference/issues/3583101
+ *
  * @ViewsReferenceSetting(
  *   id = "sift_terms",
  *   label = @Translation("Sift filters"),

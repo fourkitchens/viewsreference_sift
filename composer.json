@@ -10,7 +10,7 @@
   },
   "require": {
     "php": ">=8.3",
-    "drupal/core": "^11.3 || ^12",
+    "drupal/core": "^11.3",
     "drupal/viewsreference": "^2.0.0-beta14"
   },
   "require-dev": {

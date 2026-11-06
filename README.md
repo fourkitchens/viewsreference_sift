@@ -25,14 +25,16 @@ Sift supplies contextual filter values without requiring an exposed form.
 
 ## Requirements
 
-- Drupal 11.3 or later in the Drupal 11 series, or Drupal 12.
-- PHP 8.3 or later. Drupal 12 requires PHP 8.5 or later.
+- Drupal 11.3 or later in the Drupal 11 series.
+- PHP 8.3 or later.
 - Views, which is part of Drupal core.
 - [Views Reference Field][viewsreference] 2.0.0-beta14 or later in the 2.x
   series.
 
-Enable Taxonomy if you plan to filter by terms. On Drupal 12, setting
-discovery depends on the [upstream Views Reference fix][drupal-12].
+Enable Taxonomy if you plan to filter by terms.
+
+Drupal 12 support depends on Views Reference releasing its setting discovery
+fix. [Views Reference issue #3583101][drupal-12]
 
 
 ## Recommended modules
