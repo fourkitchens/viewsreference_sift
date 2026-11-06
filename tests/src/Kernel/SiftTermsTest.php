@@ -25,6 +25,7 @@ use Drupal\views\ViewExecutable;
 use Drupal\views\Views;
 use Drupal\viewsreference_sift\Filter\FilterResolver;
 use Drupal\viewsreference_sift\Filter\SiftFilter;
+use Drupal\viewsreference_sift\Plugin\views\display_extender\SiftDisplayExtender;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 use Symfony\Component\HttpFoundation\Request;
@@ -288,6 +289,55 @@ class SiftTermsTest extends KernelTestBase {
     $view = $this->executeWithSetting('embed_terms', $stored);
     $this->assertSame([], $view->args);
     $this->assertResultTitles(['A', 'B', 'Both', 'Neither'], $view);
+  }
+
+  /**
+   * Tests display notices for earlier contextual filters with missing values.
+   */
+  public function testDisplayNoticesForMissingFilterValues(): void {
+    $view = Views::getView('viewsreference_sift_test');
+    $this->assertInstanceOf(ViewExecutable::class, $view);
+    $this->assertTrue($view->setDisplay('embed_multi'));
+    $display = $view->display_handler;
+    $arguments = $display->getOption('arguments');
+    $arguments['tid_tags']['default_action'] = 'default';
+    $arguments['tid_tags']['default_argument_type'] = 'node';
+    // Add an unsupported contextual filter before the last two Sift filters.
+    $nid = $view->storage->getDisplay('embed_positions')['display_options']['arguments']['nid'];
+    $nid['admin_label'] = 'Article ID';
+    $nid['default_action'] = 'not found';
+    $display->overrideOption('arguments', array_slice($arguments, 0, 2, TRUE) + ['nid' => $nid] + $arguments);
+
+    $extender = $this->container->get('plugin.manager.views.display_extender')->createInstance('viewsreference_sift');
+    $this->assertInstanceOf(SiftDisplayExtender::class, $extender);
+    $settings = ['filters' => ['uid' => ['enabled' => FALSE] + SiftFilter::DEFAULT_OPTIONS]];
+    $extender->init($view, $display, $settings);
+
+    $categories = $summary = [];
+    $extender->optionsSummary($categories, $summary);
+    $this->assertSame('3 of 4 filters (1 blocked)', (string) $summary['viewsreference_sift']['value']);
+
+    $form = ['#title' => ''];
+    $form_state = (new FormState())->set('section', 'viewsreference_sift');
+    $extender->buildOptionsForm($form, $form_state);
+    $filters = $form['filters'];
+
+    $this->assertArrayNotHasKey('nid', $filters);
+    $this->assertArrayNotHasKey('blocking_filter', $filters['tid_tags']);
+    $this->assertArrayNotHasKey('default_filter', $filters['tid_tags']);
+    $this->assertArrayNotHasKey('blocking_filter', $filters['tid_audience']);
+
+    $note = $filters['tid_audience']['default_filter'];
+    $this->assertSame('item', $note['#type']);
+    $this->assertSame('Default value', (string) $note['#title']);
+    $this->assertSame('When Tags has no value, selections for Audience apply only if the default is available at render time.', (string) $note['#markup']);
+
+    $program = $filters['field_program_target_id'];
+    $warning = $program['blocking_filter'];
+    $this->assertSame('item', $warning['#type']);
+    $this->assertSame('Warning', (string) $warning['#title']);
+    $this->assertSame('Selections for Program apply only when Article ID has a value. Its missing-value action is Hide view.', (string) $warning['#markup']);
+    $this->assertSame('When Tags has no value, selections for Program apply only if the default is available at render time.', (string) $program['default_filter']['#markup']);
   }
 
   /**
