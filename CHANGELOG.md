@@ -8,6 +8,8 @@
 - Requires PHP 8.3 or later.
 - Requires Views Reference 2.0.0-beta14 or later.
 - Added type information to the Terms setting and kernel test helpers.
+- Expanded CI to check the lowest tested Drupal 11 release, latest Drupal 11,
+  and Drupal 12, with PHPStan and cspell.
 
 ### Added
 
