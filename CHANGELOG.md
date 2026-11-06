@@ -12,6 +12,7 @@
 ### Added
 
 - Adds a Views display extender for configuring contextual filters.
+- Enables the Sift display extender on install and update.
 - One widget per supported contextual filter.
 - Entity reference filters for nodes, users, media and other entity types with
   integer IDs.
