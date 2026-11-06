@@ -84,10 +84,10 @@ class ArgumentBuilderTest extends UnitTestCase {
       'tid' => new FilterSelection([12, 15], MatchMode::All),
     ]);
     $builder = new ArgumentBuilder();
-    $existing = ['0', 'replace', 'keep', 'old', 'after'];
+    $existing = ['0', 'replace', 'keep', 'old', 'after', 6 => 'extra'];
     $default_for = static fn (string $id): ?string => NULL;
 
-    $expected = ['0', '12,15', 'keep', '30+31', 'after'];
+    $expected = ['0', '12,15', 'keep', '30+31', 'after', 'all', 'extra'];
     $actual = $builder->build($arguments, $filters, $selection, $existing, $default_for);
     $this->assertSame($expected, $actual);
     $this->assertSame($expected, $builder->build($arguments, $filters, $selection, $actual, $default_for));
@@ -100,13 +100,12 @@ class ArgumentBuilderTest extends UnitTestCase {
     $arguments = [
       'with_default' => ['default_action' => 'default'],
       'with_exception' => ['default_action' => 'ignore', 'exception' => ['value' => 'skip']],
-      'without_computed_default' => ['default_action' => 'default', 'exception' => ['value' => 'fallback']],
       'with_implicit_exception' => [],
       'tid' => [],
       'unused_trailing' => ['default_action' => 'default'],
     ];
     $filters = [
-      'tid' => new SiftFilter('tid', 'taxonomy_index_tid', 4, 'taxonomy_term', [], TRUE, TRUE, 'all', 'ignore', 'Terms'),
+      'tid' => new SiftFilter('tid', 'taxonomy_index_tid', 3, 'taxonomy_term', [], TRUE, TRUE, 'all', 'ignore', 'Terms'),
     ];
     $selection = new Selection(['tid' => new FilterSelection([12, 15], MatchMode::Any)]);
     $builder = new ArgumentBuilder();
@@ -116,8 +115,53 @@ class ArgumentBuilderTest extends UnitTestCase {
       return $id === 'with_default' ? '0' : NULL;
     };
 
-    $this->assertSame(['0', 'skip', 'fallback', 'all', '12+15'], $builder->build($arguments, $filters, $selection, [1 => ''], $default_for));
-    $this->assertSame(['with_default', 'without_computed_default'], $called);
+    $this->assertSame(['0', 'skip', 'all', '12+15'], $builder->build($arguments, $filters, $selection, [1 => ''], $default_for));
+    $this->assertSame(['with_default'], $called);
+  }
+
+  /**
+   * Tests how each missing-value action affects later arguments.
+   *
+   * @param string $action
+   *   The action configured for the missing argument.
+   * @param string|null $default
+   *   The computed default value, if available.
+   * @param string[] $expected
+   *   The arguments that Sift passes to Views.
+   */
+  #[DataProvider('missingValueActions')]
+  public function testBuildHonorsMissingValueAction(string $action, ?string $default, array $expected): void {
+    $arguments = [
+      'before' => [],
+      'missing' => ['default_action' => $action, 'exception' => ['value' => 'skip']],
+      'tid' => [],
+      'after' => [],
+    ];
+    $filters = [
+      'tid' => new SiftFilter('tid', 'taxonomy_index_tid', 2, 'taxonomy_term', [], TRUE, TRUE, 'all', 'ignore', 'Terms'),
+    ];
+    $selection = new Selection(['tid' => new FilterSelection([12, 15], MatchMode::Any)]);
+    $builder = new ArgumentBuilder();
+    $existing = ['keep', NULL, NULL, 'tail'];
+
+    $this->assertSame($expected, $builder->build($arguments, $filters, $selection, $existing, static fn (string $id): ?string => $default));
+  }
+
+  /**
+   * Provides Views actions and the arguments expected after a gap.
+   *
+   * @return iterable<string, array{string, ?string, list<string>}>
+   *   The action, computed default, and expected arguments.
+   */
+  public static function missingValueActions(): iterable {
+    yield 'display all' => ['ignore', NULL, ['keep', 'skip', '12+15', 'tail']];
+    yield 'provide a default' => ['default', '0', ['keep', '0', '12+15', 'tail']];
+    yield 'provide an empty default' => ['default', '', ['keep', '', '12+15', 'tail']];
+    yield 'unavailable default' => ['default', NULL, ['keep']];
+    yield 'hide view' => ['not found', NULL, ['keep']];
+    yield 'show no results content' => ['empty', NULL, ['keep']];
+    yield 'access denied' => ['access denied', NULL, ['keep']];
+    yield 'show summary' => ['summary', NULL, ['keep']];
   }
 
 }

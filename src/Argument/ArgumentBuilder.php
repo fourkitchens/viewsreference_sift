@@ -15,9 +15,8 @@ final class ArgumentBuilder {
   /**
    * Merges selected values into the display's positional arguments.
    *
-   * Preserves values for other filters and fills gaps before the last supplied
-   * value so Views receives each argument in its configured position. Trailing
-   * positions remain unset so Views can handle its own missing arguments.
+   * Preserves values for other filters and fills gaps where the missing-value
+   * action allows it. Stops at the first gap Views needs to handle itself.
    *
    * @phpstan-param array<string, array{default_action?: string, exception?: array{value?: string}}> $arguments
    * @phpstan-param array<string, \Drupal\viewsreference_sift\Filter\SiftFilter> $filters
@@ -59,12 +58,26 @@ final class ArgumentBuilder {
 
       $id = $argument_ids[$position] ?? NULL;
       $argument = $id !== NULL ? $arguments[$id] : [];
-      $default = $id !== NULL && ($argument['default_action'] ?? NULL) === 'default'
-        ? $defaultFor($id)
-        : NULL;
+      $action = $argument['default_action'] ?? 'ignore';
+      $default = $id !== NULL && $action === 'default' ? $defaultFor($id) : NULL;
+      if (!self::allowsLaterArguments($action, $default !== NULL)) {
+        break;
+      }
       $merged[] = $default ?? $argument['exception']['value'] ?? 'all';
     }
     return $merged;
+  }
+
+  /**
+   * Determines whether Sift can fill a gap so later arguments apply.
+   *
+   * @param string $action
+   *   The Views action configured for the missing argument.
+   * @param bool $has_default
+   *   Whether a default value is available for the argument.
+   */
+  public static function allowsLaterArguments(string $action, bool $has_default): bool {
+    return $action === 'ignore' || ($action === 'default' && $has_default);
   }
 
 }
