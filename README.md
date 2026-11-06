@@ -128,6 +128,12 @@ each filter, apply the changes, and save the View.
 - **Require a selection** asks the editor to choose at least one item before
   saving. Off by default.
 
+Sift warns when the action for an earlier empty contextual filter can prevent
+a later Sift selection from applying. The warning names the earlier filter
+and its configured action. The display summary flags enabled filters with
+these warnings. If an earlier filter provides a default, a note explains that
+the later selection applies only when the default is available at render time.
+
 
 ### Recipes
 

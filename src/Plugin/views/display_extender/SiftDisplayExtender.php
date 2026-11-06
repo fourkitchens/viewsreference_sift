@@ -9,12 +9,14 @@ use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\StringTranslation\TranslatableMarkup;
 use Drupal\views\Attribute\ViewsDisplayExtender;
 use Drupal\views\Plugin\views\display_extender\DisplayExtenderPluginBase;
+use Drupal\viewsreference_sift\Argument\ArgumentBuilder;
 use Drupal\viewsreference_sift\Filter\FilterResolver;
 use Drupal\viewsreference_sift\Filter\SiftFilter;
 
 /**
  * Lets Views administrators configure Sift per display and contextual filter.
  *
+ * @phpstan-type ArgumentLabel string|\Drupal\Component\Render\MarkupInterface
  * @phpstan-type FilterOptions array{enabled: bool, label: string, description: string, bundles: list<string>, match: string, widget: string, max: int, required: bool}
  */
 #[ViewsDisplayExtender(
@@ -63,18 +65,24 @@ final class SiftDisplayExtender extends DisplayExtenderPluginBase {
    */
   public function optionsSummary(&$categories, &$options): void {
     $filters = $this->filterResolver->supportedFilters($this->displayHandler);
+    $dependencies = $this->argumentDependencies();
     $enabled = 0;
+    $blocked = 0;
     foreach (array_keys($filters) as $id) {
       if ($this->filterOptions($id)['enabled']) {
         $enabled++;
+        $blocked += isset($dependencies[$id]['blocker']) ? 1 : 0;
       }
     }
+    $summary = $filters
+      ? $this->formatPlural(count($filters), '@enabled of 1 filter', '@enabled of @count filters', ['@enabled' => $enabled])
+      : $this->t('No supported filters');
     $options['viewsreference_sift'] = [
       'category' => 'other',
       'title' => $this->t('Sift'),
-      'value' => $filters
-        ? $this->formatPlural(count($filters), '@enabled of 1 filter', '@enabled of @count filters', ['@enabled' => $enabled])
-        : $this->t('No supported filters'),
+      'value' => $blocked
+        ? $this->formatPlural($blocked, '@summary (1 blocked)', '@summary (@count blocked)', ['@summary' => $summary])
+        : $summary,
     ];
   }
 
@@ -98,6 +106,7 @@ final class SiftDisplayExtender extends DisplayExtenderPluginBase {
     $form['#title'] .= $this->t('Sift settings');
     $form['filters'] = ['#tree' => TRUE];
     $filters = $this->filterResolver->supportedFilters($this->displayHandler);
+    $dependencies = $this->argumentDependencies();
     if (!$filters) {
       $form['filters']['#markup'] = $this->t('This display has no supported contextual filters.');
     }
@@ -108,6 +117,29 @@ final class SiftDisplayExtender extends DisplayExtenderPluginBase {
         '#type' => 'details',
         '#title' => $filter->label,
         '#open' => TRUE,
+      ];
+      if ($blocker = $dependencies[$id]['blocker'] ?? NULL) {
+        $form['filters'][$id]['blocking_filter'] = [
+          '#type' => 'item',
+          '#title' => $this->t('Warning'),
+          '#markup' => $this->t('Selections for @filter apply only when @earlier has a value. Its missing-value action is @action.', [
+            '@filter' => $filter->label,
+            '@earlier' => $blocker['label'],
+            '@action' => $this->missingActionLabel($blocker['action']),
+          ]),
+        ];
+      }
+      if (isset($dependencies[$id]['default'])) {
+        $form['filters'][$id]['default_filter'] = [
+          '#type' => 'item',
+          '#title' => $this->t('Default value'),
+          '#markup' => $this->t('When @earlier has no value, selections for @filter apply only if the default is available at render time.', [
+            '@filter' => $filter->label,
+            '@earlier' => $dependencies[$id]['default'],
+          ]),
+        ];
+      }
+      $form['filters'][$id] += [
         'enabled' => [
           '#type' => 'checkbox',
           '#title' => $this->t('Enable this filter'),
@@ -177,6 +209,51 @@ final class SiftDisplayExtender extends DisplayExtenderPluginBase {
         ],
       ];
     }
+  }
+
+  /**
+   * Finds the first earlier blocker and runtime default for each argument.
+   *
+   * Checks all contextual filters in display order, including those Sift
+   * cannot expose as selectors. Defaults can only be resolved at render time.
+   *
+   * @phpstan-return array<string, array{blocker: array{label: ArgumentLabel, action: string}|null, default: ArgumentLabel|null}>
+   */
+  private function argumentDependencies(): array {
+    /** @var array<string, array{default_action?: string}> $arguments */
+    $arguments = $this->displayHandler->getOption('arguments') ?? [];
+    $dependencies = [];
+    $blocker = NULL;
+    $default = NULL;
+    foreach ($arguments as $id => $argument) {
+      $dependencies[$id] = ['blocker' => $blocker, 'default' => $default];
+      $action = $argument['default_action'] ?? 'ignore';
+      if (!ArgumentBuilder::allowsLaterArguments($action, TRUE)) {
+        $blocker ??= [
+          'label' => $this->displayHandler->getHandler('argument', $id)?->adminLabel(TRUE) ?? $id,
+          'action' => $action,
+        ];
+      }
+      elseif (!ArgumentBuilder::allowsLaterArguments($action, FALSE)) {
+        $default ??= $this->displayHandler->getHandler('argument', $id)?->adminLabel(TRUE) ?? $id;
+      }
+    }
+    return $dependencies;
+  }
+
+  /**
+   * Names a blocking action using the labels shown in Views.
+   *
+   * @see \Drupal\views\Plugin\views\argument\ArgumentPluginBase::defaultActions()
+   */
+  private function missingActionLabel(string $action): string|TranslatableMarkup {
+    return match ($action) {
+      'not found' => $this->displayHandler->hasPath() ? $this->t('Show "Page not found"') : $this->t('Hide view'),
+      'summary' => $this->t('Display a summary'),
+      'empty' => $this->t('Display contents of "No results found"'),
+      'access denied' => $this->t('Display "Access Denied"'),
+      default => $action,
+    };
   }
 
   /**
