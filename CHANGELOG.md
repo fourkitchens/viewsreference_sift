@@ -6,6 +6,11 @@
 
 - Ignores Sift values from the query string outside Views AJAX requests.
 
+### Fixed
+
+- Keeps arguments set by other Views Reference settings.
+- Clears a hidden selection when the display changes.
+
 ### Changed
 
 - Requires Drupal 11.3 or later; Drupal 10 is no longer supported.
@@ -31,6 +36,10 @@
 - Adds cache tags for selected entities to the rendered View.
 - Caps each filter at 10 selections.
 - Drops selected IDs that no longer exist or fall outside the allowed bundles.
+- Applies validated Sift selections after the other Views Reference settings.
+- Fills gaps in the argument list with the display's defaults or exceptions.
+- Uses a single-value Terms widget when the filter accepts one argument.
+- Uses the first supported filter at any position.
 
 ### Added
 
@@ -39,6 +48,7 @@
 - Added a kernel test for Terms, Argument, and Limit setting discovery.
 - Added kernel coverage for forged values, AJAX fallback, and rendered cache
   tags.
+- Added unit and kernel coverage for argument positions and the Terms widget.
 
 ## [1.0.0-beta1] - 2026-11-06
 

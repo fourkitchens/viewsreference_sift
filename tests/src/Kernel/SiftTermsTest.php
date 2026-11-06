@@ -59,6 +59,13 @@ class SiftTermsTest extends KernelTestBase {
   protected array $termIds = [];
 
   /**
+   * Fixture node IDs keyed by title.
+   *
+   * @var string[]
+   */
+  protected array $nodeIds = [];
+
+  /**
    * {@inheritdoc}
    */
   protected function setUp(): void {
@@ -81,12 +88,14 @@ class SiftTermsTest extends KernelTestBase {
     }
 
     foreach (['A' => ['A'], 'B' => ['B'], 'Both' => ['A', 'B'], 'Neither' => []] as $title => $terms) {
-      Node::create([
+      $node = Node::create([
         'type' => 'article',
         'title' => $title,
         'status' => TRUE,
         'field_tags' => array_map(fn (string $term): array => ['target_id' => $this->termIds[$term]], $terms),
-      ])->save();
+      ]);
+      $node->save();
+      $this->nodeIds[$title] = (string) $node->id();
     }
     $this->installConfig(['viewsreference_sift_test']);
   }
@@ -121,30 +130,126 @@ class SiftTermsTest extends KernelTestBase {
   }
 
   /**
-   * Tests that a taxonomy filter in the second position is ignored.
+   * Tests the first supported taxonomy filter after a numeric argument.
    */
-  public function testFirstArgumentContract(): void {
+  public function testFirstSupportedArgument(): void {
+    $field = $this->termsElement('embed_positions');
+    $this->assertSame('fieldset', $field['#type']);
+    $this->assertSame(['tid'], array_keys($field['filters']));
+
+    $view = $this->executeWithSetting('embed_positions', $this->storedSelection('tid', [$this->termIds['A']]));
+    $this->assertSame(['all', (string) $this->termIds['A']], $view->args);
+    $this->assertResultTitles(['A', 'Both'], $view);
+  }
+
+  /**
+   * Tests that both plugin orders yield the same arguments on both passes.
+   */
+  public function testArgumentPluginOrders(): void {
+    $ids = [$this->termIds['A'], $this->termIds['B']];
+    $expected = [$this->nodeIds['Both'], implode('+', $ids)];
+    foreach ([['argument', 'sift_terms'], ['sift_terms', 'argument']] as $order) {
+      $view = $this->viewWithArgumentSettings($this->nodeIds['Both'], $ids, $order);
+      $view->preExecute();
+      $this->assertSame($expected, $view->args);
+      $view->postExecute();
+
+      $view->preExecute();
+      $this->assertSame($expected, $view->args);
+      $this->assertTrue($view->execute());
+      $view->postExecute();
+      $this->assertResultTitles(['Both'], $view);
+    }
+  }
+
+  /**
+   * Tests filling an empty leading argument with a default or exception.
+   */
+  public function testEmptyLeadingArgument(): void {
+    $ids = [$this->termIds['A']];
+    foreach ([FALSE, TRUE] as $fixed_default) {
+      $view = $this->viewWithArgumentSettings('/all', $ids);
+      if ($fixed_default) {
+        $arguments = $view->display_handler->getOption('arguments');
+        $arguments['nid']['default_action'] = 'default';
+        $arguments['nid']['default_argument_type'] = 'fixed';
+        $arguments['nid']['default_argument_options'] = ['argument' => $this->nodeIds['Both']];
+        $view->display_handler->overrideOption('arguments', $arguments);
+      }
+
+      $view->preExecute();
+      $this->assertSame([$fixed_default ? $this->nodeIds['Both'] : 'all', (string) $ids[0]], $view->args);
+      $this->assertTrue($view->execute());
+      $view->postExecute();
+      $this->assertResultTitles($fixed_default ? ['Both'] : ['A', 'Both'], $view);
+    }
+  }
+
+  /**
+   * Tests that disabling multiple values keeps only the first saved term.
+   */
+  public function testSingleValueFilter(): void {
     $view = Views::getView('viewsreference_sift_test');
-    $view->setDisplay('embed_terms');
-    $display = $view->display_handler;
-    $arguments = [
-      'nid' => [
-        'id' => 'nid',
-        'table' => 'node_field_data',
-        'field' => 'nid',
-        'entity_type' => 'node',
-        'entity_field' => 'nid',
-        'plugin_id' => 'numeric',
-        'default_action' => 'ignore',
-      ],
-    ];
-    $display->overrideOption('arguments', $arguments + $display->getOption('arguments'));
+    $this->assertInstanceOf(ViewExecutable::class, $view);
+    $this->assertTrue($view->setDisplay('embed_positions'));
+    $arguments = $view->display_handler->getOption('arguments');
+    $arguments['tid']['break_phrase'] = FALSE;
+    $view->display_handler->overrideOption('arguments', $arguments);
     $view->storage->save();
 
-    $this->assertFalse($this->termsElement('embed_terms')['#access']);
-    $view = $this->executeWithSetting('embed_terms', $this->storedSelection('tid', [$this->termIds['A']]));
-    $this->assertSame([], $view->args);
-    $this->assertResultTitles(['A', 'B', 'Both', 'Neither'], $view);
+    $stored = $this->storedSelection('tid', [$this->termIds['A'], $this->termIds['B']], 'all');
+    $field = $this->termsElement('embed_positions', $stored);
+    $filter = $field['filters']['tid'] ?? NULL;
+    $this->assertIsArray($filter);
+    $this->assertFalse($filter['ids']['#tags']);
+    $this->assertArrayNotHasKey('match', $filter);
+    $default = $filter['ids']['#default_value'];
+    $this->assertInstanceOf(Term::class, $default);
+    $this->assertSame($this->termIds['A'], (int) $default->id());
+
+    $legacy = ['terms' => [['target_id' => $this->termIds['C']], ['target_id' => $this->termIds['A']]]];
+    $stale = $this->termsElement('embed_positions', $legacy);
+    $this->assertNull($stale['filters']['tid']['ids']['#default_value']);
+    $this->assertSame('Some saved selections no longer apply to this display and will be removed when you save.', (string) $stale['#description']);
+
+    $field['#parents'] = ['field_listing', 0, 'options', 'sift_terms'];
+    $form_state = new FormState();
+    $form_state->setValue($field['#parents'], [
+      'version' => 2,
+      'filters' => ['tid' => ['ids' => (string) $this->termIds['B']]],
+    ]);
+    $callback = $field['#element_validate'][0];
+    $this->assertIsCallable($callback);
+    $callback($field, $form_state);
+    $this->assertSame($this->storedSelection('tid', [$this->termIds['B']]), $form_state->getValue($field['#parents']));
+
+    $view = $this->executeWithSetting('embed_positions', $stored);
+    $this->assertSame(['all', (string) $this->termIds['A']], $view->args);
+    $this->assertResultTitles(['A', 'Both'], $view);
+  }
+
+  /**
+   * Tests that hidden settings clear the old default value.
+   */
+  public function testHiddenWidgetClearsDefault(): void {
+    $stored = $this->storedSelection('tid', [$this->termIds['A']]);
+    $hidden = $this->termsElement('embed_plain', $stored);
+    $this->assertFalse($hidden['#access']);
+    $this->assertSame('', $hidden['#default_value'] ?? '');
+  }
+
+  /**
+   * Tests that a stale saved key warns while the valid selection remains.
+   */
+  public function testStaleWidgetSelection(): void {
+    $stored = $this->storedSelection('tid', [$this->termIds['A']]);
+    $stored['filters']['obsolete'] = ['ids' => [$this->termIds['B']], 'match' => 'any'];
+    $field = $this->termsElement('embed_positions', $stored);
+    $this->assertSame(['tid'], array_keys($field['filters'] ?? []));
+    $this->assertSame('Some saved selections no longer apply to this display and will be removed when you save.', (string) $field['#description']);
+    $defaults = $field['filters']['tid']['ids']['#default_value'];
+    $this->assertCount(1, $defaults);
+    $this->assertSame($this->termIds['A'], (int) $defaults[0]->id());
   }
 
   /**
@@ -174,8 +279,9 @@ class SiftTermsTest extends KernelTestBase {
     $this->assertArrayNotHasKey('match', $depth['filters']['term_node_tid_depth']);
 
     Term::load($this->termIds['B'])->delete();
-    $stored = $this->storedSelection('tid', [$this->termIds['B'], $this->termIds['A']], 'all');
+    $stored = $this->storedSelection('tid', [$this->termIds['B'], $this->termIds['C'], $this->termIds['A']], 'all');
     $field = $this->termsElement('embed_terms', $stored);
+    $this->assertSame('Some saved selections no longer apply to this display and will be removed when you save.', (string) $field['#description']);
     $filter = $field['filters']['tid'];
     $defaults = array_values($filter['ids']['#default_value']);
     $this->assertCount(1, $defaults);
@@ -420,6 +526,23 @@ class SiftTermsTest extends KernelTestBase {
       'version' => 2,
       'filters' => [$id => ['ids' => $ids, 'match' => $match]],
     ];
+  }
+
+  /**
+   * Builds the positional embed with Views Reference Argument and Terms.
+   *
+   * @phpstan-param list<int> $ids
+   * @phpstan-param list<string> $settings
+   */
+  protected function viewWithArgumentSettings(string $argument, array $ids, array $settings = ['argument', 'sift_terms']): ViewExecutable {
+    $view = Views::getView('viewsreference_sift_test');
+    $this->assertInstanceOf(ViewExecutable::class, $view);
+    $this->assertTrue($view->setDisplay('embed_positions'));
+    $view->element['#viewsreference'] = [
+      'enabled_settings' => $settings,
+      'data' => ['argument' => $argument, 'sift_terms' => $this->storedSelection('tid', $ids)],
+    ];
+    return $view;
   }
 
   /**

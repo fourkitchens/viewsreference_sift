@@ -5,13 +5,13 @@ namespace Drupal\viewsreference_sift\Plugin\ViewsReferenceSetting;
 use Drupal\Component\Plugin\PluginBase;
 use Drupal\Core\Cache\Cache;
 use Drupal\Core\Entity\Element\EntityAutocomplete;
+use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Plugin\ContainerFactoryPluginInterface;
 use Drupal\Core\StringTranslation\StringTranslationTrait;
 use Drupal\views\ViewExecutable;
 use Drupal\viewsreference\Plugin\ViewsReferenceSettingInterface;
-use Drupal\viewsreference_sift\Argument\ArgumentBuilder;
 use Drupal\viewsreference_sift\Filter\FilterResolver;
 use Drupal\viewsreference_sift\Selection\MatchMode;
 use Drupal\viewsreference_sift\Selection\Selection;
@@ -47,7 +47,6 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
     private readonly SelectionNormalizer $selectionNormalizer,
     private readonly SelectionValidator $selectionValidator,
     private readonly ValueSource $valueSource,
-    private readonly ArgumentBuilder $argumentBuilder,
   ) {
     parent::__construct($configuration, $plugin_id, $plugin_definition);
   }
@@ -67,7 +66,6 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
       $container->get(SelectionNormalizer::class),
       $container->get(SelectionValidator::class),
       $container->get(ValueSource::class),
-      $container->get(ArgumentBuilder::class),
     );
   }
 
@@ -82,13 +80,19 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
     $filters = $this->filterResolver->forDisplay($view_id, $this->configuration['display_id'] ?? '');
     $filter = reset($filters);
     if (!$filter) {
+      unset($form_field['#default_value']);
       $form_field['#access'] = FALSE;
       return;
     }
 
-    $selection = $this->selectionNormalizer->fromStorage($form_field['#default_value'] ?? '', $filters);
+    $stored = $form_field['#default_value'] ?? '';
+    $selection = $this->selectionNormalizer->fromStorage($stored, $filters);
     $selected = $selection->filters[$filter->id] ?? NULL;
     $ids = $selected->ids ?? [];
+    $entities = $ids ? $this->entityTypeManager->getStorage($filter->entityTypeId)->loadMultiple($ids) : [];
+    if ($filter->bundles) {
+      $entities = array_filter($entities, static fn (EntityInterface $entity): bool => in_array($entity->bundle(), $filter->bundles, TRUE));
+    }
     $form_field['#type'] = 'fieldset';
     $form_field['#title'] = $this->t('Terms');
     $form_field['#tree'] = TRUE;
@@ -100,9 +104,9 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
     $widget = [
       '#type' => 'entity_autocomplete',
       '#target_type' => $filter->entityTypeId,
-      '#tags' => TRUE,
+      '#tags' => $filter->multiple,
       '#title' => $this->t('Show only content with these terms'),
-      '#default_value' => $ids ? array_values($this->entityTypeManager->getStorage($filter->entityTypeId)->loadMultiple($ids)) : [],
+      '#default_value' => $filter->multiple ? array_values($entities) : ($entities[$ids[0] ?? 0] ?? NULL),
     ];
     if ($filter->bundles) {
       $widget['#selection_settings']['target_bundles'] = $filter->bundles;
@@ -123,12 +127,19 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
     elseif ($filter->pluginId === 'taxonomy_index_tid_depth') {
       $form_field['#description'] = $this->t('Matches any selected term. A positive depth also includes child terms.');
     }
+
+    $has_stale_filters = is_array($stored) && ($stored['version'] ?? NULL) === Selection::VERSION
+      && is_array($stored['filters'] ?? NULL) && array_diff_key($stored['filters'], $filters) !== [];
+    if ($has_stale_filters || count($entities) !== count($ids)) {
+      $form_field['#description'] = $this->t('Some saved selections no longer apply to this display and will be removed when you save.');
+    }
   }
 
   /**
    * {@inheritdoc}
    */
   public function alterView(ViewExecutable $view, $value): void {
+    unset($view->element['#viewsreference_sift']['selection']);
     $filters = $this->filterResolver->forView($view);
     if (!$filters) {
       return;
@@ -140,9 +151,12 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
       $tags = Cache::buildTags($filters[$id]->entityTypeId, $selected->ids);
       $view->element['#cache']['tags'] = Cache::mergeTags($view->element['#cache']['tags'] ?? [], $tags);
     }
-    $arguments = $this->argumentBuilder->build($filters, $selection, $view->args);
-    if ($arguments !== $view->args) {
-      $view->setArguments($arguments);
+    if (!$selection->isEmpty()) {
+      $view->element['#viewsreference_sift']['selection'] = [
+        'data' => $this->selectionNormalizer->toStorage($selection),
+        'filter_ids' => array_keys($filters),
+        'display_id' => $view->current_display,
+      ];
     }
   }
 
@@ -158,11 +172,18 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
     $values = [];
     foreach (is_array($submitted) ? $submitted : [] as $id => $value) {
       $filter = $filters[$id] ?? NULL;
-      if (!$filter || !is_array($value) || !is_array($value['ids'] ?? NULL)) {
+      if (!$filter || !is_array($value)) {
+        continue;
+      }
+      $ids = $value['ids'] ?? NULL;
+      if (!$filter->multiple) {
+        $ids = is_array($ids) ? array_slice($ids, 0, 1) : [$ids];
+      }
+      if (!is_array($ids)) {
         continue;
       }
       $values[$id] = [
-        'ids' => array_map(static fn (mixed $item): mixed => is_array($item) ? ($item['target_id'] ?? NULL) : $item, $value['ids']),
+        'ids' => array_map(static fn (mixed $item): mixed => is_array($item) ? ($item['target_id'] ?? NULL) : $item, $ids),
         'match' => $filter->supportsAll ? ($value['match'] ?? NULL) : NULL,
       ];
     }

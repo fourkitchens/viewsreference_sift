@@ -33,7 +33,8 @@ final class SelectionValidator {
         continue;
       }
 
-      $capped[$id] = new FilterSelection(array_slice($selected->ids, 0, SiftFilter::DEFAULT_MAX), $selected->match);
+      $limit = $filters[$id]->multiple ? SiftFilter::DEFAULT_MAX : 1;
+      $capped[$id] = new FilterSelection(array_slice($selected->ids, 0, $limit), $selected->match);
       $by_type[$filters[$id]->entityTypeId][$id] = $capped[$id];
     }
 
