@@ -1,6 +1,6 @@
 {
   "name": "drupal/viewsreference_sift",
-  "description": "Narrow a Views Reference field's embedded View by taxonomy terms.",
+  "description": "Lets editors narrow a Views Reference field's embedded View by choosing entities for its contextual filters.",
   "type": "drupal-module",
   "license": "GPL-2.0-or-later",
   "homepage": "https://www.drupal.org/project/viewsreference_sift",

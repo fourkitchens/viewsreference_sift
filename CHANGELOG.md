@@ -29,6 +29,8 @@ Views Reference Sift follows [Semantic Versioning][semver].
 - Drupal 12 is no longer declared as supported until Views Reference
   supports it.
 - Updates the security reporting policy for Drupal.org.
+- Updates the module and package descriptions to reflect entity selection
+  for contextual filters.
 
 ### Security
 
