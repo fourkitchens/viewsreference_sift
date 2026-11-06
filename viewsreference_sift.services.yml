@@ -1,4 +1,6 @@
 services:
+  Drupal\viewsreference_sift\Argument\ArgumentBuilder:
+    autowire: true
   Drupal\viewsreference_sift\Filter\FilterResolver:
     autowire: true
   Drupal\viewsreference_sift\Selection\SelectionNormalizer:
