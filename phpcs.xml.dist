@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<ruleset name="Views Reference Sift">
+  <file>.</file>
+  <exclude-pattern>./vendor/*</exclude-pattern>
+  <exclude-pattern>./web/*</exclude-pattern>
+  <arg name="extensions" value="php,module,inc,install,yml,md"/>
+  <rule ref="Drupal"/>
+  <rule ref="DrupalPractice"/>
+</ruleset>
