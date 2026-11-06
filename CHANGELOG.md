@@ -37,6 +37,8 @@ Views Reference Sift follows [Semantic Versioning][semver].
 - Removes the Views AJAX parent entity lookup to prevent visitors from
   inferring saved selections on unpublished content, draft revisions, or
   private entities.
+- Explicitly captures the saved Sift selection before Views Reference can
+  replace field settings with URL values.
 
 ## [1.0.0-beta3] - 2026-11-06
 
