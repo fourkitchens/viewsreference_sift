@@ -13,6 +13,7 @@ use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Form\OptGroup;
 use Drupal\Core\Plugin\ContainerFactoryPluginInterface;
+use Drupal\Core\StringTranslation\PluralTranslatableMarkup;
 use Drupal\Core\StringTranslation\StringTranslationTrait;
 use Drupal\Core\StringTranslation\TranslatableMarkup;
 use Drupal\views\ViewExecutable;
@@ -312,10 +313,12 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
         $max = $filter->multiple ? $filter->max : 1;
         $message = match (TRUE) {
           $filter->required && $count === 0 => new TranslatableMarkup('Choose at least one item for @label.', ['@label' => $filter->label]),
-          $count > $max => new TranslatableMarkup('Choose at most @max items for @label.', [
-            '@max' => $max,
-            '@label' => $filter->label,
-          ]),
+          $count > $max => new PluralTranslatableMarkup(
+            $max,
+            'Choose at most 1 item for @label.',
+            'Choose at most @count items for @label.',
+            ['@label' => $filter->label],
+          ),
           default => NULL,
         };
         if ($message !== NULL) {
