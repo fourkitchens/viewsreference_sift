@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Shows required-selection and configured limit instructions on filter inputs.
+
 ### Changed
 
 - Resolves supported contextual filters with integer entity IDs in display

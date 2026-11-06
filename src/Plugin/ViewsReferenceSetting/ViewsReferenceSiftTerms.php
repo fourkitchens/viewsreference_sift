@@ -114,10 +114,27 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
       }
       $has_stale_selections = $has_stale_selections || count($entities) !== count($ids);
 
+      $widget = $this->buildWidget($filter, $entities, $ids);
+      $help = [];
+      if ($filter->required) {
+        $help[] = $this->t('A selection is required.');
+      }
+      if ($filter->multiple && $filter->max !== SiftFilter::DEFAULT_MAX) {
+        $help[] = $this->formatPlural($filter->max, 'Choose at most one item.', 'Choose at most @count items.');
+      }
+      elseif (!$filter->multiple && $widget['#type'] === 'checkboxes') {
+        $help[] = $this->t('Choose at most one item.');
+      }
+      if ($help) {
+        $help[] = $widget['#description'] ?? '';
+        $widget['#description'] = rtrim(implode(' ', $help));
+        $widget['#description_display'] = 'before';
+      }
+
       $group = [
         '#type' => 'fieldset',
         '#title' => $filter->label,
-        'ids' => $this->buildWidget($filter, $entities, $ids),
+        'ids' => $widget,
       ];
       if ($filter->description !== '') {
         $group['#description'] = $filter->description;
