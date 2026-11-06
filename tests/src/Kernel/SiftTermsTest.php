@@ -17,10 +17,14 @@ use Drupal\node\NodeInterface;
 use Drupal\taxonomy\Entity\Term;
 use Drupal\taxonomy\Entity\Vocabulary;
 use Drupal\Tests\field\Traits\EntityReferenceFieldCreationTrait;
+use Drupal\Tests\SchemaCheckTestTrait;
 use Drupal\user\Entity\User;
+use Drupal\views\Entity\View;
 use Drupal\views\ResultRow;
 use Drupal\views\ViewExecutable;
 use Drupal\views\Views;
+use Drupal\viewsreference_sift\Filter\FilterResolver;
+use Drupal\viewsreference_sift\Filter\SiftFilter;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 use Symfony\Component\HttpFoundation\Request;
@@ -34,6 +38,7 @@ use Symfony\Component\Routing\Route;
 class SiftTermsTest extends KernelTestBase {
 
   use EntityReferenceFieldCreationTrait;
+  use SchemaCheckTestTrait;
 
   /**
    * {@inheritdoc}
@@ -225,6 +230,139 @@ class SiftTermsTest extends KernelTestBase {
     $this->assertFalse($group['ids']['#tags']);
     $this->assertArrayNotHasKey('match', $group);
     $this->assertArrayNotHasKey('#selection_settings', $group['ids']);
+  }
+
+  /**
+   * Tests saved filter options, strict schema, and the runtime selection cap.
+   */
+  public function testSavedDisplayOptions(): void {
+    $this->saveTermOptions([
+      'label' => 'Topics',
+      'description' => 'Choose topics to show.',
+      'bundles' => ['tags'],
+      'match' => 'all',
+      'widget' => 'checkboxes',
+      'max' => 2,
+      'required' => TRUE,
+    ], ['tags', 'other']);
+    $this->assertConfigSchemaByName('views.view.viewsreference_sift_test');
+
+    $view = Views::getView('viewsreference_sift_test');
+    $this->assertInstanceOf(ViewExecutable::class, $view);
+    $this->assertTrue($view->setDisplay('embed_terms'));
+    $filters = $this->container->get(FilterResolver::class)->forView($view);
+    $this->assertSame(['tid'], array_keys($filters));
+    $filter = $filters['tid'];
+    $this->assertSame('Topics', (string) $filter->label);
+    $this->assertSame('Choose topics to show.', (string) $filter->description);
+    $this->assertSame(['tags'], $filter->bundles);
+    $this->assertSame('checkboxes', $filter->widget);
+    $this->assertSame(2, $filter->max);
+    $this->assertTrue($filter->required);
+
+    $group = $this->termsElement('embed_terms')['filters']['tid'];
+    $this->assertSame('Choose topics to show.', (string) $group['#description']);
+    $this->assertArrayNotHasKey('match', $group);
+
+    $extra = Term::create(['vid' => 'tags', 'name' => 'Extra topic']);
+    $extra->save();
+    $stored = $this->storedSelection('tid', [$this->termIds['A'], $this->termIds['B'], (int) $extra->id()]);
+    $view = $this->executeWithSetting('embed_terms', $stored);
+    $this->assertSame([$this->termIds['A'] . ',' . $this->termIds['B']], $view->args);
+    $this->assertResultTitles(['Both'], $view);
+
+    $outside_bundles = $this->storedSelection('tid', [$this->termIds['C']]);
+    $this->assertSame([], $this->executeWithSetting('embed_terms', $outside_bundles)->args);
+  }
+
+  /**
+   * Tests that a disabled filter contributes no widget or argument.
+   */
+  public function testDisabledDisplayFilter(): void {
+    $this->saveTermOptions(['enabled' => FALSE]);
+    $stored = $this->storedSelection('tid', [$this->termIds['A']]);
+    $field = $this->termsElement('embed_terms', $stored);
+    $this->assertFalse($field['#access']);
+    $this->assertArrayNotHasKey('filters', $field);
+
+    $view = $this->executeWithSetting('embed_terms', $stored);
+    $this->assertSame([], $view->args);
+    $this->assertResultTitles(['A', 'B', 'Both', 'Neither'], $view);
+  }
+
+  /**
+   * Tests the configured checkbox and select widget options.
+   */
+  public function testDisplayChoiceWidgets(): void {
+    $child = Term::create([
+      'vid' => 'tags',
+      'name' => 'Child & topics',
+      'parent' => ['target_id' => $this->termIds['A']],
+    ]);
+    $child->save();
+    foreach (['checkboxes', 'select'] as $type) {
+      $this->saveTermOptions(['widget' => $type]);
+      $widget = $this->termsElement('embed_terms')['filters']['tid']['ids'];
+      $this->assertSame($type, $widget['#type']);
+      $this->assertSame([
+        $this->termIds['A'] => 'A',
+        (int) $child->id() => '-Child & topics',
+        $this->termIds['B'] => 'B',
+      ], array_map('strval', $widget['#options']));
+      if ($type === 'select') {
+        $this->assertTrue($widget['#multiple']);
+      }
+    }
+  }
+
+  /**
+   * Tests the option count limit for non-autocomplete widgets.
+   */
+  public function testLargeDisplayChoiceWidgetFallsBack(): void {
+    // The fixture already provides two terms in the Tags vocabulary.
+    for ($index = 0; $index < 98; $index++) {
+      Term::create(['vid' => 'tags', 'name' => 'Extra topic ' . $index])->save();
+    }
+    $this->saveTermOptions(['widget' => 'checkboxes']);
+    $widget = $this->termsElement('embed_terms')['filters']['tid']['ids'];
+    $this->assertSame('checkboxes', $widget['#type']);
+    $this->assertCount(100, $widget['#options']);
+
+    Term::create(['vid' => 'tags', 'name' => 'One more topic'])->save();
+    foreach (['checkboxes', 'select'] as $type) {
+      $this->saveTermOptions(['widget' => $type]);
+      $widget = $this->termsElement('embed_terms')['filters']['tid']['ids'];
+      $this->assertSame('entity_autocomplete', $widget['#type']);
+      $this->assertSame('More than 100 items are available. Use autocomplete to find an item.', (string) $widget['#description']);
+    }
+  }
+
+  /**
+   * Tests required and maximum selection errors on the editor's field.
+   */
+  public function testDisplaySelectionValidation(): void {
+    $this->saveTermOptions(['label' => 'Topics', 'widget' => 'checkboxes', 'max' => 2, 'required' => TRUE]);
+    $field = $this->termsElement('embed_terms');
+    $field['#parents'] = ['field_listing', 0, 'options', 'sift_terms'];
+    $widget_parents = [...$field['#parents'], 'filters', 'tid', 'ids'];
+    $field['filters']['tid']['ids']['#parents'] = $widget_parents;
+    $callback = $field['#element_validate'][0];
+    $this->assertIsCallable($callback);
+    $extra = Term::create(['vid' => 'tags', 'name' => 'Extra topic']);
+    $extra->save();
+    $ids = [$this->termIds['A'], $this->termIds['B'], (int) $extra->id()];
+
+    foreach ([
+      [[], 'Choose at least one item for Topics.'],
+      [array_combine($ids, $ids), 'Choose at most 2 items for Topics.'],
+    ] as [$values, $expected]) {
+      $form_state = new FormState();
+      $form_state->setValue(['field_listing', 0, 'display_id'], 'embed_terms');
+      $form_state->setValue($widget_parents, $values);
+      $callback($field, $form_state);
+      $this->assertSame([implode('][', $widget_parents) => $expected], array_map('strval', $form_state->getErrors()));
+      $form_state->clearErrors();
+    }
   }
 
   /**
@@ -672,6 +810,24 @@ class SiftTermsTest extends KernelTestBase {
       'version' => 2,
       'filters' => [$id => ['ids' => $ids, 'match' => $match]],
     ];
+  }
+
+  /**
+   * Saves display settings through the View config entity.
+   *
+   * @phpstan-param array<string, mixed> $options
+   * @phpstan-param list<string>|null $validator_bundles
+   */
+  protected function saveTermOptions(array $options, ?array $validator_bundles = NULL): void {
+    $this->config('views.settings')->set('display_extenders', ['viewsreference_sift'])->save();
+    $view = View::load('viewsreference_sift_test');
+    $this->assertInstanceOf(View::class, $view);
+    $display = &$view->getDisplay('embed_terms');
+    $display['display_options']['display_extenders']['viewsreference_sift']['filters']['tid'] = $options + SiftFilter::DEFAULT_OPTIONS;
+    if ($validator_bundles !== NULL) {
+      $display['display_options']['arguments']['tid']['validate_options']['bundles'] = array_combine($validator_bundles, $validator_bundles);
+    }
+    $view->save();
   }
 
   /**
