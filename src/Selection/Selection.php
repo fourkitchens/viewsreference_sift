@@ -5,14 +5,14 @@ declare(strict_types=1);
 namespace Drupal\viewsreference_sift\Selection;
 
 /**
- * Stores the term selections for a View display.
+ * Groups entity selections for one Views display by contextual filter ID.
  */
 final readonly class Selection {
 
   public const VERSION = 2;
 
   /**
-   * Constructs the selections keyed by contextual filter ID.
+   * Keeps filter IDs as keys so selections can follow display changes.
    *
    * @phpstan-param array<string, FilterSelection> $filters
    */
@@ -21,7 +21,7 @@ final readonly class Selection {
   ) {}
 
   /**
-   * Returns whether the display has any selected terms.
+   * Reports whether all filters are empty so execution can skip argument work.
    */
   public function isEmpty(): bool {
     foreach ($this->filters as $filter) {

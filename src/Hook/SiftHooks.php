@@ -16,14 +16,14 @@ use Drupal\viewsreference_sift\Filter\FilterResolver;
 use Drupal\viewsreference_sift\Selection\SelectionNormalizer;
 
 /**
- * Provides Views hooks for Sift.
+ * Provides module help and preserves saved Sift choices during View rendering.
  */
 final class SiftHooks {
 
   use StringTranslationTrait;
 
   /**
-   * Constructs the Views hooks.
+   * Injects the services that turn saved choices into contextual arguments.
    */
   public function __construct(
     private readonly FilterResolver $filterResolver,
@@ -48,7 +48,7 @@ final class SiftHooks {
   }
 
   /**
-   * Snapshots the server-set selection on the first pre-view pass.
+   * Captures the server-set selection before Views Reference reads the request.
    *
    * @phpstan-param array<array-key, mixed> $args
    */
@@ -69,7 +69,7 @@ final class SiftHooks {
   }
 
   /**
-   * Applies the selection after Views Reference has set its arguments.
+   * Merges Sift choices with the arguments already supplied by Views Reference.
    *
    * @phpstan-param array<int, int|string|null> $args
    */

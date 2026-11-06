@@ -18,12 +18,12 @@ use Drupal\views\ViewExecutableFactory;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 
 /**
- * Resolves Sift filters from a display's configured contextual arguments.
+ * Resolves which contextual arguments Sift can expose as entity selectors.
  */
 final class FilterResolver {
 
   /**
-   * Constructs the filter resolver.
+   * Supplies Views and entity metadata for checking filter eligibility.
    */
   public function __construct(
     private readonly EntityTypeManagerInterface $entityTypeManager,
@@ -36,6 +36,9 @@ final class FilterResolver {
 
   /**
    * Resolves eligible filters for the active display in argument order.
+   *
+   * Applies saved Sift settings so the editor widget and view execution use the
+   * same filter definitions.
    *
    * @param \Drupal\views\ViewExecutable $view
    *   The view whose active display to resolve.
@@ -61,6 +64,9 @@ final class FilterResolver {
 
   /**
    * Lists supported filters for the display being edited in Views.
+   *
+   * Uses the contextual filter definitions so administrators can see eligible
+   * filters even when they are disabled in Sift.
    *
    * @return \Drupal\viewsreference_sift\Filter\SiftFilter[]
    *   The filters keyed by argument handler ID.
@@ -158,6 +164,8 @@ final class FilterResolver {
 
   /**
    * Resolves eligible filters for a configured view and display.
+   *
+   * Uses the view and display IDs from the field widget, before the view runs.
    *
    * @param string $view_id
    *   The machine name of the view.

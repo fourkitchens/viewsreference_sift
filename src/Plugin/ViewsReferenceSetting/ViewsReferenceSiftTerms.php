@@ -27,7 +27,7 @@ use Drupal\viewsreference_sift\Selection\ValueSource;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
- * Filters an embedded view by selected entities.
+ * Lets editors narrow an embedded view through its contextual filters.
  *
  * @ViewsReferenceSetting(
  *   id = "sift_terms",
@@ -40,7 +40,7 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
   use StringTranslationTrait;
 
   /**
-   * Constructs a ViewsReferenceSiftTerms plugin.
+   * Supplies the services for building widgets and applying saved selections.
    *
    * @phpstan-param array<string, mixed> $configuration
    */
@@ -59,7 +59,19 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
   }
 
   /**
-   * {@inheritdoc}
+   * Creates the setting plugin with its Drupal services.
+   *
+   * @param \Symfony\Component\DependencyInjection\ContainerInterface $container
+   *   The container for widget and selection services.
+   * @param array $configuration
+   *   The setting plugin configuration.
+   * @param string $plugin_id
+   *   The ID of the setting plugin.
+   * @param mixed $plugin_definition
+   *   The definition of the setting plugin.
+   *
+   * @return static
+   *   The setting plugin instance.
    *
    * @phpstan-param array<string, mixed> $configuration
    */
@@ -78,7 +90,13 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
   }
 
   /**
-   * {@inheritdoc}
+   * Builds a selection widget for each enabled filter on the chosen display.
+   *
+   * Hides the setting if the display has no enabled filters. Saved IDs supply
+   * widget defaults when the selected entities still fit the display.
+   *
+   * @param array $form_field
+   *   The Views Reference setting element to replace with filter widgets.
    *
    * @phpstan-param array<string, mixed> $form_field
    */
@@ -224,7 +242,18 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
   }
 
   /**
-   * {@inheritdoc}
+   * Prepares the saved selection for the late Views hook to apply.
+   *
+   * Resolves and validates the selection before adding entity cache tags and
+   * staging it for this display. The hook applies it after Views Reference has
+   * set the view's other arguments.
+   *
+   * @param \Drupal\views\ViewExecutable $view
+   *   The view that will receive the selection.
+   * @param mixed $value
+   *   The selection supplied by Views Reference.
+   *
+   * @see \Drupal\viewsreference_sift\Hook\SiftHooks::applySelection()
    */
   public function alterView(ViewExecutable $view, $value): void {
     unset($view->element['#viewsreference_sift']['selection']);
@@ -250,6 +279,9 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
 
   /**
    * Validates widget limits and converts values into the stored shape.
+   *
+   * Normalizes the different widget value shapes and reports required or
+   * maximum-selection errors on the affected filter's input.
    *
    * @phpstan-param array<string, mixed> $element
    */
