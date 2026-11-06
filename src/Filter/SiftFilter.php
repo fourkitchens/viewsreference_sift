@@ -8,7 +8,7 @@ use Drupal\Core\StringTranslation\TranslatableMarkup;
 use Drupal\viewsreference_sift\Selection\MatchMode;
 
 /**
- * Describes an eligible contextual filter on a Views display.
+ * Carries the filter settings shared by the field widget and view execution.
  */
 final readonly class SiftFilter {
 
@@ -27,7 +27,7 @@ final readonly class SiftFilter {
   ];
 
   /**
-   * Constructs a Sift filter description.
+   * Pairs Views argument metadata with the display's Sift settings.
    *
    * @param string $id
    *   The argument handler ID.
@@ -88,6 +88,9 @@ final readonly class SiftFilter {
 
   /**
    * Applies the display's match policy to a selection.
+   *
+   * An explicit policy takes precedence over the editor's choice. A filter
+   * without All support falls back to Any when the policy requires All.
    */
   public function resolveMatch(MatchMode $editor_choice): MatchMode {
     return match ($this->matchPolicy) {

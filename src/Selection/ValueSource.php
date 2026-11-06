@@ -13,12 +13,12 @@ use Drupal\Core\Routing\RouteMatchInterface;
 use Drupal\views\ViewExecutable;
 
 /**
- * Resolves the source of a Terms selection during view execution.
+ * Identifies which Sift selection may be used during view execution.
  */
 final class ValueSource {
 
   /**
-   * Constructs a selection value source.
+   * Supplies route and entity storage access for Views AJAX recovery.
    */
   public function __construct(
     private readonly RouteMatchInterface $routeMatch,
@@ -26,7 +26,13 @@ final class ValueSource {
   ) {}
 
   /**
-   * Prefers stored settings and accepts request settings only on Views AJAX.
+   * Reads the selection from the trusted snapshot or a Views AJAX request.
+   *
+   * A snapshot is authoritative even when empty. On Views AJAX, a matching
+   * stored field item takes precedence over the supplied selection. Other
+   * requests need a trusted snapshot to supply a selection.
+   *
+   * @see \Drupal\viewsreference_sift\Hook\SiftHooks::snapshot()
    */
   public function resolve(ViewExecutable $view, mixed $supplied): mixed {
     $trusted = $view->element['#viewsreference_sift']['trusted'] ?? NULL;

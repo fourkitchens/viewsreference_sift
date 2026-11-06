@@ -5,12 +5,12 @@ declare(strict_types=1);
 namespace Drupal\viewsreference_sift\Selection;
 
 /**
- * Stores the selected terms and match mode for one contextual filter.
+ * Pairs entity IDs with the match mode for one contextual filter.
  */
 final readonly class FilterSelection {
 
   /**
-   * Constructs a contextual filter selection.
+   * Keeps selected IDs in editor order for argument building and limits.
    *
    * @phpstan-param list<int> $ids
    */

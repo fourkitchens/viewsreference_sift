@@ -1,0 +1,46 @@
+name: Bug report
+description: Report a reproducible problem with Views Reference Sift.
+body:
+  - type: input
+    id: drupal-version
+    attributes:
+      label: Drupal version
+    validations:
+      required: true
+  - type: input
+    id: php-version
+    attributes:
+      label: PHP version
+    validations:
+      required: true
+  - type: input
+    id: views-reference-version
+    attributes:
+      label: Views Reference version
+    validations:
+      required: true
+  - type: input
+    id: sift-version
+    attributes:
+      label: Views Reference Sift version
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Include relevant field, display, and contextual filter settings.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true

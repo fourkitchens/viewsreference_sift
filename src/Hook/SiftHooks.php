@@ -6,6 +6,9 @@ namespace Drupal\viewsreference_sift\Hook;
 
 use Drupal\Core\Hook\Attribute\Hook;
 use Drupal\Core\Hook\Order\Order;
+use Drupal\Core\Routing\RouteMatchInterface;
+use Drupal\Core\StringTranslation\StringTranslationTrait;
+use Drupal\Core\StringTranslation\TranslatableMarkup;
 use Drupal\views\Plugin\views\argument\ArgumentPluginBase;
 use Drupal\views\ViewExecutable;
 use Drupal\viewsreference_sift\Argument\ArgumentBuilder;
@@ -13,12 +16,14 @@ use Drupal\viewsreference_sift\Filter\FilterResolver;
 use Drupal\viewsreference_sift\Selection\SelectionNormalizer;
 
 /**
- * Provides Views hooks for Sift.
+ * Provides module help and preserves saved Sift choices during View rendering.
  */
 final class SiftHooks {
 
+  use StringTranslationTrait;
+
   /**
-   * Constructs the Views hooks.
+   * Injects the services that turn saved choices into contextual arguments.
    */
   public function __construct(
     private readonly FilterResolver $filterResolver,
@@ -27,7 +32,23 @@ final class SiftHooks {
   ) {}
 
   /**
-   * Snapshots the server-set selection on the first pre-view pass.
+   * Directs site builders to the field settings and Views display options.
+   *
+   * @see \hook_help()
+   */
+  #[Hook('help')]
+  public function help(string $route_name, RouteMatchInterface $route_match): ?TranslatableMarkup {
+    if ($route_name !== 'help.page.viewsreference_sift') {
+      return NULL;
+    }
+
+    return $this->t('<p>Enable <strong>Sift filters</strong> in the Views Reference field settings. To configure filters for a display, open <strong>Sift</strong> under <strong>Advanced</strong> in the Views UI.</p><p><a href=":readme">Read the Views Reference Sift README</a>.</p>', [
+      ':readme' => 'https://github.com/fourkitchens/viewsreference_sift/blob/1.0.x/README.md',
+    ]);
+  }
+
+  /**
+   * Captures the server-set selection before Views Reference reads the request.
    *
    * @phpstan-param array<array-key, mixed> $args
    */
@@ -48,7 +69,7 @@ final class SiftHooks {
   }
 
   /**
-   * Applies the selection after Views Reference has set its arguments.
+   * Merges Sift choices with the arguments already supplied by Views Reference.
    *
    * @phpstan-param array<int, int|string|null> $args
    */

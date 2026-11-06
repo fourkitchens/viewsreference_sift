@@ -8,19 +8,23 @@ use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 
 /**
- * Caps selections and checks whether their IDs match the filter definitions.
+ * Enforces selection limits and entity restrictions before the view runs.
  */
 final class SelectionValidator {
 
   /**
-   * Constructs a selection validator.
+   * Supplies entity storage to check selected IDs and bundles.
    */
   public function __construct(
     private readonly EntityTypeManagerInterface $entityTypeManager,
   ) {}
 
   /**
-   * Keeps existing IDs in allowed bundles, within the per-filter limit.
+   * Caps selections before checking whether IDs exist in allowed bundles.
+   *
+   * If none survive, keeps the capped IDs so Views can apply its configured
+   * validation failure action. A filter with a Sift-only bundle restriction
+   * drops those IDs because Views cannot enforce that restriction.
    *
    * @phpstan-param array<string, \Drupal\viewsreference_sift\Filter\SiftFilter> $filters
    */

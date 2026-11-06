@@ -8,12 +8,16 @@ use Drupal\viewsreference_sift\Selection\MatchMode;
 use Drupal\viewsreference_sift\Selection\Selection;
 
 /**
- * Builds Views contextual arguments from a Sift selection.
+ * Keeps Sift selections aligned with the display's contextual arguments.
  */
 final class ArgumentBuilder {
 
   /**
    * Merges selected values into the display's positional arguments.
+   *
+   * Preserves values for other filters and fills gaps before the last supplied
+   * value so Views receives each argument in its configured position. Trailing
+   * positions remain unset so Views can handle its own missing arguments.
    *
    * @phpstan-param array<string, array{default_action?: string, exception?: array{value?: string}}> $arguments
    * @phpstan-param array<string, \Drupal\viewsreference_sift\Filter\SiftFilter> $filters

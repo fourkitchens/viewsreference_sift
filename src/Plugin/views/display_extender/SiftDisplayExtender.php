@@ -13,7 +13,7 @@ use Drupal\viewsreference_sift\Filter\FilterResolver;
 use Drupal\viewsreference_sift\Filter\SiftFilter;
 
 /**
- * Configures Sift settings for a Views display.
+ * Lets Views administrators configure Sift per display and contextual filter.
  *
  * @phpstan-type FilterOptions array{enabled: bool, label: string, description: string, bundles: list<string>, match: string, widget: string, max: int, required: bool}
  */
@@ -25,7 +25,7 @@ use Drupal\viewsreference_sift\Filter\SiftFilter;
 final class SiftDisplayExtender extends DisplayExtenderPluginBase {
 
   /**
-   * Constructs the display extender.
+   * Supplies filter and bundle metadata for the Views settings form.
    *
    * @phpstan-param array<string, mixed> $configuration
    */
@@ -49,7 +49,14 @@ final class SiftDisplayExtender extends DisplayExtenderPluginBase {
   }
 
   /**
-   * {@inheritdoc}
+   * Summarizes enabled filters under Other in the Views display settings.
+   *
+   * The Sift entry opens the form for editing the current display's filters.
+   *
+   * @param array $categories
+   *   The Views UI categories.
+   * @param array $options
+   *   The settings summaries to which the Sift entry is added.
    *
    * @phpstan-param array<string, mixed> $categories
    * @phpstan-param array<string, mixed> $options
@@ -72,7 +79,14 @@ final class SiftDisplayExtender extends DisplayExtenderPluginBase {
   }
 
   /**
-   * {@inheritdoc}
+   * Builds the Sift options form for the current Views display.
+   *
+   * Shows bundle and match controls only where the filter supports them.
+   *
+   * @param array $form
+   *   The Views options form to populate.
+   * @param \Drupal\Core\Form\FormStateInterface $form_state
+   *   The form state identifying the requested settings section.
    *
    * @phpstan-param array<string, mixed> $form
    */
@@ -166,7 +180,14 @@ final class SiftDisplayExtender extends DisplayExtenderPluginBase {
   }
 
   /**
-   * {@inheritdoc}
+   * Checks that each supported filter has an integer maximum in range.
+   *
+   * Reports invalid maxima on their input before settings can be applied.
+   *
+   * @param array $form
+   *   The Views options form containing the maximum inputs.
+   * @param \Drupal\Core\Form\FormStateInterface $form_state
+   *   The submitted settings and validation state.
    *
    * @phpstan-param array<string, mixed> $form
    */
@@ -184,7 +205,14 @@ final class SiftDisplayExtender extends DisplayExtenderPluginBase {
   }
 
   /**
-   * {@inheritdoc}
+   * Stores normalized settings for the display's supported filters.
+   *
+   * Drops settings for removed or ineligible filters.
+   *
+   * @param array $form
+   *   The Views options form.
+   * @param \Drupal\Core\Form\FormStateInterface $form_state
+   *   The submitted Sift settings.
    *
    * @phpstan-param array<string, mixed> $form
    */

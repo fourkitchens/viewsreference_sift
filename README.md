@@ -1,105 +1,162 @@
 # Views Reference Sift
 
-Views Reference Sift adds a **Sift filters** setting to Views Reference fields.
-Editors can narrow a shared listing by selecting entities for its contextual
-filters. One View display can serve multiple listings without extra fields
-or displays.
+Views Reference Sift lets editors select entities to narrow an embedded
+View. It is for site builders who want to reuse one listing across several
+pages. [Views Reference Field Filter][exposed] reuses exposed filters, while
+Sift supplies contextual filter values without requiring an exposed form.
+
+[Repository][repo] · [Issue queue][issues] · [Packagist][packagist]
+
+
+## Table of contents
+
+- [Requirements](#requirements)
+- [Recommended modules](#recommended-modules)
+- [Installation](#installation)
+- [Configuration](#configuration)
+    - [Field](#field)
+    - [View](#view)
+    - [Display settings](#display-settings)
+    - [Recipes](#recipes)
+- [Troubleshooting](#troubleshooting)
+- [FAQ](#faq)
+- [Maintainers](#maintainers)
+
 
 ## Requirements
 
 - Drupal 11.3 or later in the Drupal 11 series, or Drupal 12.
 - PHP 8.3 or later. Drupal 12 requires PHP 8.5 or later.
-- The Views core module. Enable Taxonomy to use term filters.
-- Views Reference 2.0.0-beta14 or later in the 2.x series.
+- Views, which is part of Drupal core.
+- [Views Reference Field][viewsreference] 2.0.0-beta14 or later in the 2.x
+  series.
 
-Drupal 12 support depends on Views Reference providing an attribute class for
-setting discovery ([upstream issue #3583101](https://www.drupal.org/project/viewsreference/issues/3583101)).
+Enable Taxonomy if you plan to filter by terms. On Drupal 12, setting
+discovery depends on the [upstream Views Reference fix][drupal-12].
 
-Run this command from your Drupal site's Composer project root.
 
-```sh
-composer require 'fourkitchens/viewsreference_sift:^1.0@beta' \
-  'drupal/viewsreference:^2.0.0-beta14'
-```
+## Recommended modules
 
-Views Reference 2.x is available as a beta. If the site's root `composer.json`
-already sets `"minimum-stability": "beta"`, you can use
-`composer require fourkitchens/viewsreference_sift`. Otherwise, the command
-above opts in to beta releases for both packages.
+- [Views Reference Field Filter][exposed] gives editors controls for a View's
+  exposed filters.
+- [Inline Form Errors][inline-errors] is a core module that shows an error
+  next to the input and links to it from the error summary.
 
-## Set up the field
 
-1. Enable the Views Reference Sift module.
-2. In the Views Reference field settings, enable **Sift filters**.
-3. When editing content, select a View and display. **Filter this list**
-   appears under **Options**, alongside **Items per page** when the limit
-   setting is enabled.
-   Choose items for each filter and pick a match mode where offered.
-   Leave an optional filter empty to let the Argument setting or the display
-   supply the value.
+## Installation
 
-### Using Sift with the Argument setting
+1. Once the package is listed on [Packagist][packagist], run these commands
+   from your Drupal project's Composer root.
 
-Enable both **Sift filters** and **Argument** when they fill different
-contextual argument positions. Sift's selection wins when both settings fill
-the same position. The display's configured default or exception value fills
-any gap before the last supplied argument.
+   ```sh
+   composer require 'fourkitchens/viewsreference_sift:^1.0@beta' \
+     'drupal/viewsreference:^2.0.0-beta14'
+   drush en viewsreference_sift
+   ```
 
-## Configure the view
+1. Set up the field and View as described below. Sift enables its Views
+   display extender during installation. On a site upgrading from an older
+   beta, run `drush updb` to enable the extender.
 
-Sift shows one widget per supported and enabled contextual filter in display
-order.
-The target entity type must use integer IDs.
+Views Reference 2.x requires beta stability until it has a stable release.
+The Composer constraints above allow beta versions for these two packages
+without changing the stability setting for the whole site.
 
-- **Has taxonomy term ID**, with or without depth.
-- **Entity reference field IDs**, such as a field referencing program nodes.
-- **Numeric ID arguments** validated as an entity type, such as a user ID.
 
-Set **Administrative title** to give the widget a default label. Otherwise,
-Sift uses the label of the single allowed bundle or the entity type's plural
-label.
+## Configuration
 
-- Enable **Allow multiple values** to select several IDs. Sift offers **All**
-  for handlers that support it. Numeric ID and depth filters use **Any**.
-- Set the exception value to `all` so gaps can skip that argument. Under
-  **When the filter value is not available**, choose
-  **Display all results for the specified field** for an unfiltered empty
-  state.
-- Use an entity validator to limit the allowed bundles. For taxonomy terms,
-  choose the vocabularies and let the validator accept multiple IDs when
-  the filter allows them.
-- For taxonomy filters in **Any** mode, enable **Reduce duplicates** to return
-  each matching result once.
 
-A positive taxonomy depth also matches child terms.
+### Field
 
-AJAX pagers and exposed forms keep the selections. A **More** link passes the
-argument values to its target page display when that display uses the same
-contextual filters.
+1. Add a **Views Reference** field to an entity bundle, such as an Article
+   content type.
+1. Edit the field settings. Allow the View and display type you plan to use
+   and enable **Sift filters**.
+1. Edit a content item and select the View and display. Open **Options** and
+   use **Filter this list** to select items. Choose a match mode if offered.
+   Save the content item.
+
+You can also enable Views Reference's **Argument** setting. Use it to fill
+other contextual filter positions. If both settings fill the same position,
+the Sift selection wins.
+
+
+### View
+
+1. Edit a View display under **Structure → Views**. Add a contextual filter
+   that accepts entity IDs. Supported options include **Has taxonomy term
+   ID** with or without depth, an entity reference field's target ID, and
+   numeric ID filters with an entity validator.
+1. Use entity types with integer IDs. Enable **Specify validation criteria**
+   and choose an entity validator to restrict the allowed bundles.
+1. Set **Administrative title** to label the widget. Without it, Sift uses
+   the name of the single allowed bundle or the entity type's plural label.
+1. Turn on **Allow multiple values** if editors should select several
+   items. **All** is available for filters that support it. Numeric and
+   taxonomy depth filters use **Any**.
+1. Keep the exception value `all` to skip empty positions. To show all
+   results when no value is supplied, choose **Display all results for the
+   specified field** under **When the filter value is not available**.
+
+Sift shows one widget per supported and enabled filter, in display order.
+Selections on different filters apply together. For taxonomy filters in
+**Any** mode, enable **Reduce duplicates** if the View repeats rows. A
+positive taxonomy depth also matches child terms.
+
 
 ### Display settings
 
-Edit the View display and open **Advanced → Other → Sift**. Configure each
-supported contextual filter for that display, apply the settings, then save
-the View. After updating an existing site, run the pending database updates to
-enable the Sift display extender.
+Edit a display and open **Advanced → Other → Sift**. Set the options for
+each filter, apply the changes, and save the View.
 
-| Option | Choices | Default |
-| --- | --- | --- |
-| Enable this filter (`enabled`) | On or off. Turning it off hides the widget and skips its saved selection. | On |
-| Label (`label`) | Override the default widget label. | Blank, use the default filter label. |
-| Description (`description`) | Add help text to the editor's filter control. | Blank. A taxonomy depth filter shows its built-in help. |
-| Allowed bundles (`bundles`) | Choose a subset when the contextual filter allows multiple specified bundles. | Use the contextual filter's allowed bundles. |
-| Match (`match`) | Let the editor choose (`editor`), always match any (`any`), or always match all (`all`). Filters without All support use Any. | `editor`, with Any selected initially. |
-| Widget (`widget`) | Autocomplete (`autocomplete`), checkboxes (`checkboxes`), or a select list (`select`). | `autocomplete` |
-| Maximum selections (`max`) | A whole number from 1 to 50 for a filter that allows multiple values. A single-value filter accepts one item. | 10 |
-| Require a selection (`required`) | On or off. When on, the editor must select at least one item before saving. | Off |
+- **Enable this filter** shows the widget and applies the selection. On by
+  default.
+- **Label** replaces the default widget label. Blank by default.
+- **Description** adds help for editors. Blank by default. The taxonomy depth
+  filter has built-in help.
+- **Allowed bundles** narrows the validator's list when it specifies two or
+  more bundles. The default uses all bundles the validator allows.
+- **Match** lets the editor choose Any or All by default. You can also
+  require Any or All on filters that support both modes.
+- **Widget** uses autocomplete by default. You can choose checkboxes or a
+  select list. Both switch to autocomplete above 100 referenceable items.
+- **Maximum selections** defaults to 10. Set it from 1 to 50 for a filter
+  that accepts multiple items. A single-value filter accepts one item.
+- **Require a selection** asks the editor to choose at least one item before
+  saving. Off by default.
 
-Checkboxes and select lists use autocomplete when more than 100 referenceable
-items are available. Taxonomy terms in lists that fit show their hierarchy.
 
-The exported configuration uses contextual filter IDs as keys. This example
-configures `tid` on the `embed_1` display of a View.
+### Recipes
+
+#### Show related content
+
+In the contextual filter, choose **Provide default value** and a source
+from the current page. For example, use the current page's taxonomy term.
+Leave the Sift selection empty when editing the listing so Views supplies
+the default value.
+
+#### Name the selection in the heading
+
+In the contextual filter settings, enable **Override title** under **When
+the filter value is available or a default is provided**. Use
+`{{ arguments.<filter id> }}` in the title. For example, enter
+`More about {{ arguments.tid }}` for the `tid` filter. Find the ID under
+**Replacement patterns**. Enable **Include View Title** in the Views
+Reference field settings and select it on the field item.
+
+#### Add a See all link
+
+Create a Page display with the same contextual filters in the same order
+as the embedded display. On the embedded display, set **Link display** to
+that page and enable **Use more link**. Set the link text to **See all**.
+Views passes the current arguments to the Page display.
+
+#### Ship display settings in configuration
+
+Save the View and export its configuration. For a recipe, include the
+exported View file in the recipe's `config` directory and install Sift as
+part of the recipe. Keep the complete View export. This excerpt shows the
+Sift settings for contextual filter `tid` on display `embed_1`.
 
 ```yaml
 display:
@@ -120,13 +177,56 @@ display:
               required: false
 ```
 
-## Limits
 
-Sift applies the display's selection limits when rendering saved or AJAX
-selections. It ignores URL values outside Views AJAX requests.
+## Troubleshooting
 
-Deleted entities drop out of the widget when you reopen the content. Sift
-filters out missing entities and those outside the allowed bundles. If no
-selected IDs survive, Views normally handles those IDs using the display's
-validation failure action. A filter with a narrower bundle list configured
-in Sift skips the selection when no IDs qualify.
+- **Filter this list is missing.** Check that the field enables **Sift
+  filters** and that the chosen display has a supported contextual filter
+  enabled in Sift.
+- **Sift is missing in the Views UI.** Run `drush updb` after upgrading from
+  an earlier beta. Open **Advanced → Other** on the display.
+- **A selection is missing.** Reopen the content item and check whether the
+  entity still exists and is in an allowed bundle. Sift filters out IDs
+  outside the allowed bundles. If all selected IDs fail the View's
+  validation, Views uses its configured failure action. If the Sift bundle
+  list is narrower and no IDs qualify, Sift skips the selection.
+- **The selection disappears while paging.** Enable **Use AJAX** on the View
+  display. Sift keeps the saved selections when Views reloads the results
+  through AJAX.
+
+
+## FAQ
+
+**Why use contextual filters?** Site builders can reuse a View with different
+saved selections on each embed. Visitors can use exposed filters separately
+if the View provides them.
+
+**Does it work with Layout Builder blocks and Paragraphs?** Yes. Use a Views
+Reference field on the block content or paragraph entity. The same setup
+works on other entities that have a Views Reference field.
+
+**Does Sift trust values from URLs?** Sift ignores those values on ordinary
+page requests. On Views AJAX requests it prefers the saved field selection.
+When it cannot load that selection, it checks the supplied IDs against the
+filter and applies its selection limit.
+
+**Is this project on Drupal.org?** Not yet. The code, issue queue, and
+releases are on GitHub. [Packagist][packagist] is the Composer package page.
+
+
+## Maintainers
+
+[Four Kitchens][four-kitchens] maintains this project. Use the [issue
+queue][issues] for bugs and feature requests. See [CONTRIBUTING.md] for
+development and [SECURITY.md] for private reports.
+
+[repo]: https://github.com/fourkitchens/viewsreference_sift
+[issues]: https://github.com/fourkitchens/viewsreference_sift/issues
+[packagist]: https://packagist.org/packages/fourkitchens/viewsreference_sift
+[exposed]: https://www.drupal.org/project/viewsreference_filter
+[viewsreference]: https://www.drupal.org/project/viewsreference
+[inline-errors]: https://www.drupal.org/docs/8/core/modules/inline-form-errors
+[drupal-12]: https://www.drupal.org/project/viewsreference/issues/3583101
+[four-kitchens]: https://github.com/fourkitchens
+[CONTRIBUTING.md]: CONTRIBUTING.md
+[SECURITY.md]: SECURITY.md

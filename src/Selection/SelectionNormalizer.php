@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Drupal\viewsreference_sift\Selection;
 
 /**
- * Converts between stored field settings and validated term selections.
+ * Adapts current and legacy field settings to the selection objects Sift uses.
  *
  * @phpstan-type StoredFilter array{ids: list<int>, match: value-of<MatchMode>}
  */
@@ -13,6 +13,9 @@ final class SelectionNormalizer {
 
   /**
    * Reads versioned selections and the original single-filter setting.
+   *
+   * Maps the original setting to the first configured filter and normalizes
+   * values against the enabled filters and their current match policies.
    *
    * @phpstan-param array<string, \Drupal\viewsreference_sift\Filter\SiftFilter> $filters
    */
@@ -61,6 +64,9 @@ final class SelectionNormalizer {
 
   /**
    * Writes the selection as plain data for Views Reference storage.
+   *
+   * Uses arrays and scalar values because Views Reference reads serialized
+   * field settings with object creation disabled.
    *
    * @phpstan-return array{version: 2, filters: array<string, StoredFilter>}
    */
