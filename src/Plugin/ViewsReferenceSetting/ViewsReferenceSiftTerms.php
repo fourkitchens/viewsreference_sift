@@ -21,11 +21,11 @@ use Drupal\viewsreference_sift\Selection\ValueSource;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
- * Filters an embedded view by taxonomy terms.
+ * Filters an embedded view by selected entities.
  *
  * @ViewsReferenceSetting(
  *   id = "sift_terms",
- *   label = @Translation("Terms"),
+ *   label = @Translation("Sift filters"),
  *   default_value = "",
  * )
  */
@@ -78,8 +78,7 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
     $view_name = $this->configuration['view_name'] ?? '';
     $view_id = EntityAutocomplete::extractEntityIdFromAutocompleteInput($view_name) ?? $view_name;
     $filters = $this->filterResolver->forDisplay($view_id, $this->configuration['display_id'] ?? '');
-    $filter = reset($filters);
-    if (!$filter) {
+    if (!$filters) {
       unset($form_field['#default_value']);
       $form_field['#access'] = FALSE;
       return;
@@ -87,50 +86,56 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
 
     $stored = $form_field['#default_value'] ?? '';
     $selection = $this->selectionNormalizer->fromStorage($stored, $filters);
-    $selected = $selection->filters[$filter->id] ?? NULL;
-    $ids = $selected->ids ?? [];
-    $entities = $ids ? $this->entityTypeManager->getStorage($filter->entityTypeId)->loadMultiple($ids) : [];
-    if ($filter->bundles) {
-      $entities = array_filter($entities, static fn (EntityInterface $entity): bool => in_array($entity->bundle(), $filter->bundles, TRUE));
-    }
     $form_field['#type'] = 'fieldset';
-    $form_field['#title'] = $this->t('Terms');
+    $form_field['#title'] = $this->t('Filter this list');
     $form_field['#tree'] = TRUE;
     $form_field['#sift_filters'] = $filters;
     $form_field['#element_validate'][] = [self::class, 'validateSelection'];
     $form_field['version'] = ['#type' => 'value', '#value' => Selection::VERSION];
     unset($form_field['#default_value']);
 
-    $widget = [
-      '#type' => 'entity_autocomplete',
-      '#target_type' => $filter->entityTypeId,
-      '#tags' => $filter->multiple,
-      '#title' => $this->t('Show only content with these terms'),
-      '#default_value' => $filter->multiple ? array_values($entities) : ($entities[$ids[0] ?? 0] ?? NULL),
-    ];
-    if ($filter->bundles) {
-      $widget['#selection_settings']['target_bundles'] = $filter->bundles;
-    }
-    $form_field['filters'][$filter->id]['ids'] = $widget;
-
-    if ($filter->supportsAll) {
-      $form_field['filters'][$filter->id]['match'] = [
-        '#type' => 'radios',
-        '#title' => $this->t('Match'),
-        '#options' => [
-          MatchMode::Any->value => $this->t('Any of these terms'),
-          MatchMode::All->value => $this->t('All of these terms'),
-        ],
-        '#default_value' => ($selected->match ?? MatchMode::Any)->value,
-      ];
-    }
-    elseif ($filter->pluginId === 'taxonomy_index_tid_depth') {
-      $form_field['#description'] = $this->t('Matches any selected term. A positive depth also includes child terms.');
-    }
-
-    $has_stale_filters = is_array($stored) && ($stored['version'] ?? NULL) === Selection::VERSION
+    $has_stale_selections = is_array($stored) && ($stored['version'] ?? NULL) === Selection::VERSION
       && is_array($stored['filters'] ?? NULL) && array_diff_key($stored['filters'], $filters) !== [];
-    if ($has_stale_filters || count($entities) !== count($ids)) {
+    foreach ($filters as $filter) {
+      $selected = $selection->filters[$filter->id] ?? NULL;
+      $ids = $selected->ids ?? [];
+      $entities = $ids ? $this->entityTypeManager->getStorage($filter->entityTypeId)->loadMultiple($ids) : [];
+      if ($filter->bundles) {
+        $entities = array_filter($entities, static fn (EntityInterface $entity): bool => in_array($entity->bundle(), $filter->bundles, TRUE));
+      }
+      $has_stale_selections = $has_stale_selections || count($entities) !== count($ids);
+
+      $group = [
+        '#type' => 'fieldset',
+        '#title' => $filter->label,
+        'ids' => [
+          '#type' => 'entity_autocomplete',
+          '#target_type' => $filter->entityTypeId,
+          '#tags' => $filter->multiple,
+          '#title' => $filter->multiple ? $this->t('Select items') : $this->t('Select an item'),
+          '#default_value' => $filter->multiple ? array_values($entities) : ($entities[$ids[0] ?? 0] ?? NULL),
+        ],
+      ];
+      if ($filter->bundles) {
+        $group['ids']['#selection_settings']['target_bundles'] = $filter->bundles;
+      }
+      if ($filter->supportsAll) {
+        $group['match'] = [
+          '#type' => 'radios',
+          '#title' => $this->t('Match'),
+          '#options' => [
+            MatchMode::Any->value => $this->t('Any of these items'),
+            MatchMode::All->value => $this->t('All of these items'),
+          ],
+          '#default_value' => ($selected->match ?? MatchMode::Any)->value,
+        ];
+      }
+      elseif ($filter->pluginId === 'taxonomy_index_tid_depth') {
+        $group['#description'] = $this->t('Matches any selected term. A positive depth also includes child terms.');
+      }
+      $form_field['filters'][$filter->id] = $group;
+    }
+    if ($has_stale_selections) {
       $form_field['#description'] = $this->t('Some saved selections no longer apply to this display and will be removed when you save.');
     }
   }
