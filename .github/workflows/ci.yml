@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - 1.0.x
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+      - run: composer install --no-interaction
+      - run: vendor/bin/phpcs
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - drupal: '^10.3'
+            php: '8.3'
+          - drupal: '^11.4'
+            php: '8.3'
+          - drupal: '^11.4'
+            php: '8.4'
+    steps:
+      - uses: actions/checkout@v6
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: pdo_sqlite
+          coverage: none
+      - name: Install Drupal and test dependencies
+        env:
+          DRUPAL_VERSION: ${{ matrix.drupal }}
+        run: |
+          composer create-project "drupal/recommended-project:$DRUPAL_VERSION" "$RUNNER_TEMP/site" --no-install --no-interaction
+          cd "$RUNNER_TEMP/site"
+          composer config minimum-stability beta
+          composer config prefer-stable true
+          composer config repositories.viewsreference-sift path "$GITHUB_WORKSPACE"
+          composer require --no-interaction --with-all-dependencies 'fourkitchens/viewsreference_sift:*@dev' 'drupal/viewsreference:^2.0' "drupal/core-dev:$DRUPAL_VERSION"
+      - name: Run kernel tests
+        working-directory: ${{ runner.temp }}/site
+        env:
+          SIMPLETEST_DB: sqlite://localhost/${{ runner.temp }}/test.sqlite
+          SIMPLETEST_BASE_URL: http://localhost
+          BROWSERTEST_OUTPUT_DIRECTORY: ${{ runner.temp }}
+        run: vendor/bin/phpunit -c web/core web/modules/contrib/viewsreference_sift
