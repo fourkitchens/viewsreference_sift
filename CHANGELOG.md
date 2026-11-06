@@ -16,6 +16,8 @@
 - Adds configuration schema for exported Sift display settings.
 - Applies display settings to filter widgets, validation, and arguments.
 - Adds kernel and browser coverage for display settings and uninstall.
+- Per-display settings in the Views UI: filters, labels, bundles, match,
+  widget, maximum, required.
 - One widget per supported contextual filter.
 - Entity reference filters for nodes, users, media and other entity types with
   integer IDs.

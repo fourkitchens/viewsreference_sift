@@ -35,7 +35,7 @@ above opts in to beta releases for both packages.
    appears under **Options**, alongside **Items per page** when the limit
    setting is enabled.
    Choose items for each filter and pick a match mode where offered.
-   Leave the selection empty to let the Argument setting or the display
+   Leave an optional filter empty to let the Argument setting or the display
    supply the value.
 
 ### Using Sift with the Argument setting
@@ -47,15 +47,17 @@ any gap before the last supplied argument.
 
 ## Configure the view
 
-Sift shows one widget per supported contextual filter in display order.
+Sift shows one widget per supported and enabled contextual filter in display
+order.
 The target entity type must use integer IDs.
 
 - **Has taxonomy term ID**, with or without depth.
 - **Entity reference field IDs**, such as a field referencing program nodes.
 - **Numeric ID arguments** validated as an entity type, such as a user ID.
 
-Set **Administrative title** to name the widget. Otherwise, Sift uses the
-label of the single allowed bundle or the entity type's plural label.
+Set **Administrative title** to give the widget a default label. Otherwise,
+Sift uses the label of the single allowed bundle or the entity type's plural
+label.
 
 - Enable **Allow multiple values** to select several IDs. Sift offers **All**
   for handlers that support it. Numeric ID and depth filters use **Any**.
@@ -71,16 +73,60 @@ label of the single allowed bundle or the entity type's plural label.
 
 A positive taxonomy depth also matches child terms.
 
-AJAX pagers and exposed forms keep the selected terms. A **More** link passes
-them to its target page display when that display uses the same contextual
-filters.
+AJAX pagers and exposed forms keep the selections. A **More** link passes the
+argument values to its target page display when that display uses the same
+contextual filters.
+
+### Display settings
+
+Edit the View display and open **Advanced → Other → Sift**. Configure each
+supported contextual filter for that display, apply the settings, then save
+the View. After updating an existing site, run the pending database updates to
+enable the Sift display extender.
+
+| Option | Choices | Default |
+| --- | --- | --- |
+| Enable this filter (`enabled`) | On or off. Turning it off hides the widget and skips its saved selection. | On |
+| Label (`label`) | Override the default widget label. | Blank, use the default filter label. |
+| Description (`description`) | Add help text to the editor's filter control. | Blank. A taxonomy depth filter shows its built-in help. |
+| Allowed bundles (`bundles`) | Choose a subset when the contextual filter allows multiple specified bundles. | Use the contextual filter's allowed bundles. |
+| Match (`match`) | Let the editor choose (`editor`), always match any (`any`), or always match all (`all`). Filters without All support use Any. | `editor`, with Any selected initially. |
+| Widget (`widget`) | Autocomplete (`autocomplete`), checkboxes (`checkboxes`), or a select list (`select`). | `autocomplete` |
+| Maximum selections (`max`) | A whole number from 1 to 50 for a filter that allows multiple values. A single-value filter accepts one item. | 10 |
+| Require a selection (`required`) | On or off. When on, the editor must select at least one item before saving. | Off |
+
+Checkboxes and select lists use autocomplete when more than 100 referenceable
+items are available. Taxonomy terms in lists that fit show their hierarchy.
+
+The exported configuration uses contextual filter IDs as keys. This example
+configures `tid` on the `embed_1` display of a View.
+
+```yaml
+display:
+  embed_1:
+    display_options:
+      display_extenders:
+        viewsreference_sift:
+          filters:
+            tid:
+              enabled: true
+              label: Topics
+              description: Choose topics to show in this listing.
+              bundles:
+                - tags
+              match: any
+              widget: checkboxes
+              max: 3
+              required: false
+```
 
 ## Limits
 
-Sift applies up to 10 selections per filter and ignores URL values outside
-Views AJAX requests.
+Sift applies the display's selection limits when rendering saved or AJAX
+selections. It ignores URL values outside Views AJAX requests.
 
 Deleted entities drop out of the widget when you reopen the content. Sift
-filters out missing entities and those outside the allowed bundles. If none
-of the capped IDs survive, Views handles those IDs using the display's
-configured validation failure action.
+filters out missing entities and those outside the allowed bundles. If no
+selected IDs survive, Views normally handles those IDs using the display's
+validation failure action. A filter with a narrower bundle list configured
+in Sift skips the selection when no IDs qualify.
