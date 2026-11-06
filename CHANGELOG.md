@@ -12,11 +12,14 @@
   and Drupal 12, with PHPStan and cspell.
 - Excluded static analysis, coding standards, and spell-check files from
   package archives.
+- Applied the Views Reference setting discovery patch in Drupal 12 CI.
+- Documented the Views Reference requirement for Drupal 12 setting discovery.
 
 ### Added
 
 - Added level 6 PHPStan analysis for module code and tests.
 - Added cspell with a project dictionary.
+- Added a kernel test for Terms, Argument, and Limit setting discovery.
 
 ## [1.0.0-beta1] - 2026-11-06
 

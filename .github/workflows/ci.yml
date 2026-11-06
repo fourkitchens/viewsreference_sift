@@ -21,7 +21,7 @@ jobs:
       - run: composer validate --strict
       - run: composer install --no-interaction
       - run: vendor/bin/phpcs
-      - run: git ls-files -- ':!LICENSE.txt' | npx --yes cspell@8.19.4 --no-progress --file-list stdin
+      - run: git ls-files -- ':!LICENSE.txt' ':!tests/patches/*.patch' | npx --yes cspell@8.19.4 --no-progress --file-list stdin
 
   phpstan:
     runs-on: ubuntu-latest
@@ -61,7 +61,7 @@ jobs:
           - name: drupal-12
             drupal: '^12.0@beta'
             php: '8.5'
-            # Views Reference's Drupal 12 compatibility fixes are pending.
+            # Keep this non-blocking until the Views Reference fix lands upstream.
             experimental: true
     steps:
       - uses: actions/checkout@v4
@@ -98,6 +98,24 @@ jobs:
             "drupal/core-composer-scaffold:$DRUPAL_VERSION" \
             "drupal/core-dev:$DRUPAL_VERSION" \
             "drupal/viewsreference:$VIEWSREFERENCE_VERSION"
+      - name: Apply the Views Reference discovery patch
+        if: matrix.name == 'drupal-12'
+        working-directory: ${{ runner.temp }}/site
+        # cspell:ignore cweagans repatch
+        run: |
+          cp "$GITHUB_WORKSPACE/tests/patches/viewsreference-attribute.patch" .
+          cat > patches.json <<'EOF'
+          {
+            "patches": {
+              "drupal/viewsreference": {
+                "Support setting attribute discovery": "viewsreference-attribute.patch"
+              }
+            }
+          }
+          EOF
+          composer config allow-plugins.cweagans/composer-patches true
+          composer require --dev --no-interaction 'cweagans/composer-patches:^2'
+          composer patches-repatch --no-interaction
       - name: Run kernel tests
         working-directory: ${{ runner.temp }}/site
         env:
