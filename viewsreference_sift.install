@@ -10,14 +10,17 @@ declare(strict_types=1);
 /**
  * Implements hook_install().
  */
-function viewsreference_sift_install(): void {
+function viewsreference_sift_install(bool $is_syncing): void {
+  if ($is_syncing) {
+    return;
+  }
   _viewsreference_sift_enable_display_extender();
 }
 
 /**
  * Implements hook_uninstall().
  */
-function viewsreference_sift_uninstall(): void {
+function viewsreference_sift_uninstall(bool $is_syncing): void {
   $plugin_id = 'viewsreference_sift';
   $config_factory = \Drupal::configFactory();
   $views_settings = $config_factory->getEditable('views.settings');
@@ -26,6 +29,12 @@ function viewsreference_sift_uninstall(): void {
   unset($remaining[$plugin_id]);
   if ($remaining !== $extenders) {
     $views_settings->set('display_extenders', array_is_list($extenders) ? array_values($remaining) : $remaining)->save();
+  }
+
+  // Drupal rebuilds routes before importing views.settings. The extender must
+  // already be disabled, and the import handles individual view configuration.
+  if ($is_syncing) {
+    return;
   }
 
   foreach ($config_factory->listAll('views.view.') as $name) {
