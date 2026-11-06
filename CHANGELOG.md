@@ -28,6 +28,7 @@ Views Reference Sift follows [Semantic Versioning][semver].
 - The Composer package is now `drupal/viewsreference_sift`.
 - Drupal 12 is no longer declared as supported until Views Reference
   supports it.
+- Updates the security reporting policy for Drupal.org.
 
 ### Security
 
