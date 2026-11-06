@@ -13,46 +13,95 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.3'
           coverage: none
+      - run: composer validate --strict
       - run: composer install --no-interaction
       - run: vendor/bin/phpcs
+      - run: git ls-files -- ':!LICENSE.txt' | npx --yes cspell@8.19.4 --no-progress --file-list stdin
+
+  phpstan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: none
+      - name: Install Drupal and analysis dependencies
+        run: |
+          composer create-project 'drupal/recommended-project:^11' "$RUNNER_TEMP/site" --no-install --no-interaction
+          cd "$RUNNER_TEMP/site"
+          composer config minimum-stability beta
+          composer config prefer-stable true
+          composer config repositories.viewsreference-sift path "$GITHUB_WORKSPACE"
+          composer require --no-interaction --with-all-dependencies 'fourkitchens/viewsreference_sift:*@dev' 'drupal/core-dev:^11'
+      - name: Run PHPStan
+        working-directory: ${{ runner.temp }}/site
+        run: vendor/bin/phpstan analyze --configuration=web/modules/contrib/viewsreference_sift/phpstan.neon.dist --no-progress
 
   test:
+    name: test (${{ matrix.name }})
     runs-on: ubuntu-latest
+    continue-on-error: ${{ matrix.experimental == true }}
     strategy:
+      fail-fast: false
       matrix:
         include:
-          - drupal: '^10.3'
+          - name: lowest
+            drupal: '11.3.20'
             php: '8.3'
-          - drupal: '^11.4'
-            php: '8.3'
-          - drupal: '^11.4'
+            viewsreference: '2.0.0-beta14'
+          - name: latest-11
+            drupal: '^11'
             php: '8.4'
+          - name: drupal-12
+            drupal: '^12.0@beta'
+            php: '8.5'
+            # Views Reference's Drupal 12 compatibility fixes are pending.
+            experimental: true
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
           extensions: pdo_sqlite
           coverage: none
+      - name: Locate Composer download cache
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: ${{ runner.os }}-composer-${{ matrix.name }}-php${{ matrix.php }}-${{ hashFiles('composer.json', '.github/workflows/ci.yml') }}
       - name: Install Drupal and test dependencies
         env:
+          MATRIX_NAME: ${{ matrix.name }}
           DRUPAL_VERSION: ${{ matrix.drupal }}
+          VIEWSREFERENCE_VERSION: ${{ matrix.viewsreference || '*' }}
         run: |
           composer create-project "drupal/recommended-project:$DRUPAL_VERSION" "$RUNNER_TEMP/site" --no-install --no-interaction
           cd "$RUNNER_TEMP/site"
           composer config minimum-stability beta
           composer config prefer-stable true
           composer config repositories.viewsreference-sift path "$GITHUB_WORKSPACE"
-          composer require --no-interaction --with-all-dependencies 'fourkitchens/viewsreference_sift:*@dev' 'drupal/viewsreference:^2.0' "drupal/core-dev:$DRUPAL_VERSION"
+          if [ "$MATRIX_NAME" = drupal-12 ]; then
+            # Drupal 12 release archives omit the test bootstrap.
+            composer config preferred-install.drupal/core source
+          fi
+          composer require --no-interaction --with-all-dependencies \
+            'fourkitchens/viewsreference_sift:*@dev' \
+            "drupal/core-recommended:$DRUPAL_VERSION" \
+            "drupal/core-composer-scaffold:$DRUPAL_VERSION" \
+            "drupal/core-dev:$DRUPAL_VERSION" \
+            "drupal/viewsreference:$VIEWSREFERENCE_VERSION"
       - name: Run kernel tests
         working-directory: ${{ runner.temp }}/site
         env:
           SIMPLETEST_DB: sqlite://localhost/${{ runner.temp }}/test.sqlite
           SIMPLETEST_BASE_URL: http://localhost
           BROWSERTEST_OUTPUT_DIRECTORY: ${{ runner.temp }}
-        run: vendor/bin/phpunit -c web/core web/modules/contrib/viewsreference_sift
+        run: vendor/bin/phpunit -c web/core --display-deprecations web/modules/contrib/viewsreference_sift

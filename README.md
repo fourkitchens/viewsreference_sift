@@ -6,15 +6,16 @@ One View display can serve multiple listings without extra fields or displays.
 
 ## Requirements
 
-- Drupal 10.3 or later in the Drupal 10 series, or Drupal 11.
+- Drupal 11.3 or later in the Drupal 11 series, or Drupal 12.
+- PHP 8.3 or later. Drupal 12 requires PHP 8.5 or later.
 - The Views and Taxonomy core modules.
-- Views Reference 2.x.
+- Views Reference 2.0.0-beta14 or later in the 2.x series.
 
 Run this command from your Drupal site's Composer project root.
 
 ```sh
 composer require 'fourkitchens/viewsreference_sift:^1.0@beta' \
-  'drupal/viewsreference:^2.0@beta'
+  'drupal/viewsreference:^2.0.0-beta14'
 ```
 
 Views Reference 2.x is available as a beta. If the site's root `composer.json`

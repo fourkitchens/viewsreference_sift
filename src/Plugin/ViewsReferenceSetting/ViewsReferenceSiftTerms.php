@@ -19,6 +19,8 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
  *   label = @Translation("Terms"),
  *   default_value = "",
  * )
+ *
+ * @phpstan-consistent-constructor
  */
 class ViewsReferenceSiftTerms extends PluginBase implements ViewsReferenceSettingInterface, ContainerFactoryPluginInterface {
 
@@ -26,6 +28,8 @@ class ViewsReferenceSiftTerms extends PluginBase implements ViewsReferenceSettin
 
   /**
    * Constructs a ViewsReferenceSiftTerms plugin.
+   *
+   * @phpstan-param array<string, mixed> $configuration
    */
   public function __construct(
     array $configuration,
@@ -38,6 +42,8 @@ class ViewsReferenceSiftTerms extends PluginBase implements ViewsReferenceSettin
 
   /**
    * {@inheritdoc}
+   *
+   * @phpstan-param array<string, mixed> $configuration
    */
   public static function create(ContainerInterface $container, array $configuration, $plugin_id, $plugin_definition): static {
     return new static(
@@ -50,6 +56,8 @@ class ViewsReferenceSiftTerms extends PluginBase implements ViewsReferenceSettin
 
   /**
    * Gets a display's first contextual filter if it accepts taxonomy term IDs.
+   *
+   * @phpstan-return array<string, mixed>|null
    */
   protected function firstTermArgument(string $view_id, string $display_id): ?array {
     $view = Views::getView($view_id);
@@ -58,15 +66,21 @@ class ViewsReferenceSiftTerms extends PluginBase implements ViewsReferenceSettin
 
   /**
    * Checks the active display's first contextual filter.
+   *
+   * @phpstan-return array<string, mixed>|null
    */
   private function getFirstTermArgument(ViewExecutable $view): ?array {
-    $arguments = $view->display_handler?->getOption('arguments') ?? [];
+    /** @var \Drupal\views\Plugin\views\display\DisplayPluginBase|null $display */
+    $display = $view->display_handler;
+    $arguments = $display?->getOption('arguments') ?? [];
     $argument = reset($arguments);
     return in_array($argument['plugin_id'] ?? NULL, ['taxonomy_index_tid', 'taxonomy_index_tid_depth'], TRUE) ? $argument : NULL;
   }
 
   /**
    * {@inheritdoc}
+   *
+   * @phpstan-param array<string, mixed> $form_field
    */
   public function alterFormField(array &$form_field): void {
     $name_parts = explode('(', $this->configuration['view_name'] ?? '');
@@ -130,6 +144,8 @@ class ViewsReferenceSiftTerms extends PluginBase implements ViewsReferenceSettin
 
   /**
    * Extracts valid term IDs from setting data that can come from an AJAX URL.
+   *
+   * @phpstan-return list<int>
    */
   private function termIds(mixed $value): array {
     if (!is_array($value) || !is_array($value['terms'] ?? NULL)) {

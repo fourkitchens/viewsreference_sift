@@ -8,6 +8,7 @@ use Drupal\Core\Field\FieldStorageDefinitionInterface;
 use Drupal\KernelTests\KernelTestBase;
 use Drupal\node\Entity\Node;
 use Drupal\node\Entity\NodeType;
+use Drupal\node\NodeInterface;
 use Drupal\taxonomy\Entity\Term;
 use Drupal\taxonomy\Entity\Vocabulary;
 use Drupal\Tests\field\Traits\EntityReferenceFieldCreationTrait;
@@ -202,13 +203,20 @@ class SiftTermsTest extends KernelTestBase {
 
   /**
    * Asserts which nodes the view returned in display order.
+   *
+   * @phpstan-param list<string> $titles
    */
   protected function assertResultTitles(array $titles, ViewExecutable $view): void {
-    $this->assertSame($titles, array_map(static fn (ResultRow $row): string => $row->_entity->getTitle(), $view->result));
+    $this->assertSame($titles, array_map(static function (ResultRow $row): string {
+      self::assertInstanceOf(NodeInterface::class, $row->_entity);
+      return $row->_entity->getTitle();
+    }, $view->result));
   }
 
   /**
    * Builds the Terms element from Views Reference widget configuration.
+   *
+   * @phpstan-return array<string, mixed>
    */
   protected function termsElement(string $display, mixed $value = '', string $view = 'Test (listing) (viewsreference_sift_test)'): array {
     $plugin = $this->container->get('plugin.manager.viewsreference.setting')->createInstance('sift_terms', [

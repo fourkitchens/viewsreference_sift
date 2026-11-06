@@ -9,8 +9,9 @@
     "source": "https://github.com/fourkitchens/viewsreference_sift"
   },
   "require": {
-    "drupal/core": "^10.3 || ^11",
-    "drupal/viewsreference": "^2.0"
+    "php": ">=8.3",
+    "drupal/core": "^11.3 || ^12",
+    "drupal/viewsreference": "^2.0.0-beta14"
   },
   "require-dev": {
     "drupal/coder": "^9.0"
