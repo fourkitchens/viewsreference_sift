@@ -42,6 +42,7 @@
 - Added a kernel test for Terms, Argument, and Limit setting discovery.
 - Added kernel coverage for forged values, AJAX fallback, and rendered cache
   tags.
+- Added unit and kernel coverage for argument positions and the Terms widget.
 
 ## [1.0.0-beta1] - 2026-11-06
 

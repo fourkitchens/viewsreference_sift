@@ -20,10 +20,12 @@ use PHPUnit\Framework\Attributes\Group;
 class ArgumentBuilderTest extends UnitTestCase {
 
   /**
-   * Tests replacing arguments when the first filter has selected IDs.
+   * Tests formatting selected IDs while keeping later arguments.
    *
    * @param string $plugin_id
    *   The contextual filter plugin ID.
+   * @param bool $multiple
+   *   Whether the filter supports multiple values.
    * @param bool $supports_all
    *   Whether the filter supports matching all selected values.
    * @param \Drupal\viewsreference_sift\Selection\MatchMode $match
@@ -32,29 +34,90 @@ class ArgumentBuilderTest extends UnitTestCase {
    *   The formatted argument.
    */
   #[DataProvider('matchModes')]
-  public function testBuild(string $plugin_id, bool $supports_all, MatchMode $match, string $expected): void {
+  public function testBuild(string $plugin_id, bool $multiple, bool $supports_all, MatchMode $match, string $expected): void {
+    $arguments = ['tid' => [], 'second' => []];
     $filters = [
-      'tid' => new SiftFilter('tid', $plugin_id, 0, 'taxonomy_term', [], TRUE, $supports_all, 'all', 'ignore', 'Terms'),
+      'tid' => new SiftFilter('tid', $plugin_id, 0, 'taxonomy_term', [], $multiple, $supports_all, 'all', 'ignore', 'Terms'),
     ];
     $selection = new Selection(['tid' => new FilterSelection([12, 15], $match)]);
     $builder = new ArgumentBuilder();
     $existing = ['first', 'second'];
+    $default_for = static fn (string $id): ?string => NULL;
 
-    $this->assertSame([$expected], $builder->build($filters, $selection, []));
-    $this->assertSame([$expected], $builder->build($filters, $selection, $existing));
-    $this->assertSame($existing, $builder->build($filters, new Selection([]), $existing));
+    $this->assertSame([$expected], $builder->build($arguments, $filters, $selection, [], $default_for));
+    $this->assertSame([$expected, 'second'], $builder->build($arguments, $filters, $selection, $existing, $default_for));
+    $this->assertSame($existing, $builder->build($arguments, $filters, new Selection([]), $existing, $default_for));
   }
 
   /**
    * Provides supported and unsupported match modes.
    *
-   * @return iterable<string, array{string, bool, MatchMode, string}>
-   *   The plugin, supported mode, requested mode, and formatted argument.
+   * @return iterable<string, array{string, bool, bool, MatchMode, string}>
+   *   The plugin, capabilities, requested mode, and formatted argument.
    */
   public static function matchModes(): iterable {
-    yield 'any' => ['taxonomy_index_tid', TRUE, MatchMode::Any, '12+15'];
-    yield 'all' => ['taxonomy_index_tid', TRUE, MatchMode::All, '12,15'];
-    yield 'all on the depth filter uses any' => ['taxonomy_index_tid_depth', FALSE, MatchMode::All, '12+15'];
+    yield 'any' => ['taxonomy_index_tid', TRUE, TRUE, MatchMode::Any, '12+15'];
+    yield 'all' => ['taxonomy_index_tid', TRUE, TRUE, MatchMode::All, '12,15'];
+    yield 'all on the depth filter uses any' => ['taxonomy_index_tid_depth', TRUE, FALSE, MatchMode::All, '12+15'];
+    yield 'single-value filter uses the first ID' => ['taxonomy_index_tid', FALSE, FALSE, MatchMode::All, '12'];
+  }
+
+  /**
+   * Tests that only positions with a nonempty selection are replaced.
+   */
+  public function testBuildPreservesUnownedValues(): void {
+    $arguments = [
+      'before' => [],
+      'tid' => [],
+      'unselected' => [],
+      'tid_depth' => [],
+      'after' => [],
+    ];
+    $filters = [
+      'tid' => new SiftFilter('tid', 'taxonomy_index_tid', 1, 'taxonomy_term', [], TRUE, TRUE, 'all', 'ignore', 'Terms'),
+      'unselected' => new SiftFilter('unselected', 'taxonomy_index_tid', 2, 'taxonomy_term', [], TRUE, TRUE, 'all', 'ignore', 'Terms'),
+      'tid_depth' => new SiftFilter('tid_depth', 'taxonomy_index_tid_depth', 3, 'taxonomy_term', [], TRUE, FALSE, 'all', 'ignore', 'Terms'),
+    ];
+    $selection = new Selection([
+      'tid_depth' => new FilterSelection([30, 31], MatchMode::All),
+      'unselected' => new FilterSelection([], MatchMode::Any),
+      'tid' => new FilterSelection([12, 15], MatchMode::All),
+    ]);
+    $builder = new ArgumentBuilder();
+    $existing = ['0', 'replace', 'keep', 'old', 'after'];
+    $default_for = static fn (string $id): ?string => NULL;
+
+    $expected = ['0', '12,15', 'keep', '30+31', 'after'];
+    $actual = $builder->build($arguments, $filters, $selection, $existing, $default_for);
+    $this->assertSame($expected, $actual);
+    $this->assertSame($expected, $builder->build($arguments, $filters, $selection, $actual, $default_for));
+  }
+
+  /**
+   * Tests that defaults and exceptions fill interior gaps only.
+   */
+  public function testBuildFillsInteriorGaps(): void {
+    $arguments = [
+      'with_default' => ['default_action' => 'default'],
+      'with_exception' => ['default_action' => 'ignore', 'exception' => ['value' => 'skip']],
+      'without_computed_default' => ['default_action' => 'default', 'exception' => ['value' => 'fallback']],
+      'with_implicit_exception' => [],
+      'tid' => [],
+      'unused_trailing' => ['default_action' => 'default'],
+    ];
+    $filters = [
+      'tid' => new SiftFilter('tid', 'taxonomy_index_tid', 4, 'taxonomy_term', [], TRUE, TRUE, 'all', 'ignore', 'Terms'),
+    ];
+    $selection = new Selection(['tid' => new FilterSelection([12, 15], MatchMode::Any)]);
+    $builder = new ArgumentBuilder();
+    $called = [];
+    $default_for = static function (string $id) use (&$called): ?string {
+      $called[] = $id;
+      return $id === 'with_default' ? '0' : NULL;
+    };
+
+    $this->assertSame(['0', 'skip', 'fallback', 'all', '12+15'], $builder->build($arguments, $filters, $selection, [1 => ''], $default_for));
+    $this->assertSame(['with_default', 'without_computed_default'], $called);
   }
 
 }

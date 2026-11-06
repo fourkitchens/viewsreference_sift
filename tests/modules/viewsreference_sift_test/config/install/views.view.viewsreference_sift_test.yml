@@ -129,3 +129,39 @@ display:
           default_action: ignore
           exception:
             value: all
+  embed_positions:
+    display_plugin: embed
+    id: embed_positions
+    display_title: Positional terms
+    position: 5
+    display_options:
+      defaults:
+        arguments: false
+      arguments:
+        nid:
+          id: nid
+          table: node_field_data
+          field: nid
+          entity_type: node
+          entity_field: nid
+          plugin_id: numeric
+          default_action: ignore
+          exception:
+            value: all
+        tid:
+          id: tid
+          table: taxonomy_index
+          field: tid
+          plugin_id: taxonomy_index_tid
+          break_phrase: true
+          default_action: ignore
+          exception:
+            value: all
+          specify_validation: true
+          validate:
+            type: 'entity:taxonomy_term'
+            fail: 'not found'
+          validate_options:
+            bundles:
+              tags: tags
+            multiple: 1
