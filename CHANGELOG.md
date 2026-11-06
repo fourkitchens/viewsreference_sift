@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.0.0-beta2] - 2026-11-06
+
 ### Security
 
 - Ignores Sift values from the query string outside Views AJAX requests.
