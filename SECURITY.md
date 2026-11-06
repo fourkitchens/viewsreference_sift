@@ -2,25 +2,25 @@
 
 ## Supported versions
 
-Security fixes target the latest `1.0.x` release. If you use a beta or release
-candidate, upgrade to the latest stable release when it is available.
+Security fixes target the latest `1.0.x` release. Drupal security advisories
+cover stable releases of projects that opt in. Alpha, beta, and release
+candidate releases fall outside that coverage.
 
 ## Report a vulnerability
 
-Report Sift vulnerabilities through GitHub's private reporting form. Never open
-a public issue for a vulnerability. [Report a vulnerability](https://github.com/fourkitchens/viewsreference_sift/security/advisories/new).
+Never open a public issue for a vulnerability.
+
+For covered stable releases, follow the Drupal Security Team's confidential
+reporting process. For vulnerabilities in Drupal core or Views Reference,
+follow the same process.
+[Drupal Security Team reporting instructions][reporting]
+
+Until Sift has a covered stable release, report vulnerabilities privately
+through the Drupal.org contact form of a maintainer listed on the
+[Sift project page][project].
 
 Include the affected Sift version, steps to reproduce the issue, and its
-security impact. We aim to acknowledge reports within
-[CONFIRM: 5 business days].
+security impact.
 
-For vulnerabilities in Drupal core or Views Reference, follow Drupal.org's
-confidential reporting process. [Drupal Security Team reporting instructions](https://www.drupal.org/docs/develop/issues/issue-procedures-and-etiquette/reporting-a-security-issue).
-
-## Coordinated disclosure
-
-We develop and review the fix in a temporary private fork attached to a draft
-GitHub security advisory. We release the fix, then publish the advisory.
-
-Packagist imports advisories from the GitHub Advisory Database. The
-`composer audit` command checks Packagist for advisories by default.
+[reporting]: https://www.drupal.org/docs/develop/issues/issue-procedures-and-etiquette/reporting-a-security-issue
+[project]: https://www.drupal.org/project/viewsreference_sift

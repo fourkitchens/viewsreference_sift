@@ -4,7 +4,6 @@ drush
 fieldable
 fourkitchens
 langcode
-packagist
 phpcodesniffer
 phpcs
 phpstan
