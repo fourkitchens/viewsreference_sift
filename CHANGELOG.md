@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.0.0-beta3] - 2026-11-06
+
 ### Fixed
 
 - Shows required-selection and configured limit instructions on filter inputs.
