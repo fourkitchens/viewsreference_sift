@@ -12,6 +12,7 @@
 ### Added
 
 - Added level 6 PHPStan analysis for module code and tests.
+- Added cspell with a project dictionary.
 
 ## [1.0.0-beta1] - 2026-11-06
 

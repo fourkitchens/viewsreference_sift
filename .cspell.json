@@ -1,0 +1,12 @@
+{
+  "version": "0.2",
+  "language": "en-US",
+  "ignorePaths": ["vendor", "web", "composer.lock"],
+  "dictionaryDefinitions": [
+    {
+      "name": "viewsreference-sift",
+      "path": "./.cspell-project-words.txt"
+    }
+  ],
+  "dictionaries": ["viewsreference-sift"]
+}
