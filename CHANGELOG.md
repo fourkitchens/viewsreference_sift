@@ -12,6 +12,8 @@
 ### Added
 
 - One widget per supported contextual filter.
+- Entity reference filters for nodes, users, media and other entity types with
+  integer IDs.
 - Added kernel coverage for combined filters and references to nodes and users.
 
 ## [1.0.0-beta2] - 2026-11-06
