@@ -87,7 +87,7 @@ final class SelectionNormalizer {
   }
 
   /**
-   * Keeps unique positive term IDs in the order they were supplied.
+   * Keeps unique positive entity IDs in the order they were supplied.
    *
    * @phpstan-param array<array-key, mixed> $values
    * @phpstan-return list<int>

@@ -1,5 +1,7 @@
 name: Views Reference Sift
-description: "Narrow a Views Reference field's embedded View by taxonomy terms."
+description: >-
+  Lets editors narrow a Views Reference field's embedded View by choosing
+  entities for its contextual filters.
 type: module
 package: Views
 core_version_requirement: ^11.3

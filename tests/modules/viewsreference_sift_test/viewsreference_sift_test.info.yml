@@ -1,5 +1,5 @@
 name: Views Reference Sift Test
-description: Provides embedded displays for testing the Terms setting.
+description: Provides embedded displays for testing the Sift filters setting.
 type: module
 package: Testing
 core_version_requirement: ^11.3
