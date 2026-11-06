@@ -6,6 +6,11 @@
 
 - Resolves supported contextual filters with integer entity IDs in display
   order.
+- The setting is labeled Sift filters.
+
+### Added
+
+- One widget per supported contextual filter.
 
 ## [1.0.0-beta2] - 2026-11-06
 

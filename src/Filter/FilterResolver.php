@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Drupal\viewsreference_sift\Filter;
 
 use Drupal\Core\Entity\EntityFieldManagerInterface;
+use Drupal\Core\Entity\EntityTypeBundleInfoInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Entity\FieldableEntityInterface;
 use Drupal\views\Plugin\ViewsHandlerManager;
@@ -26,6 +27,7 @@ final class FilterResolver {
   public function __construct(
     private readonly EntityTypeManagerInterface $entityTypeManager,
     private readonly EntityFieldManagerInterface $entityFieldManager,
+    private readonly EntityTypeBundleInfoInterface $entityTypeBundleInfo,
     private readonly ViewExecutableFactory $executableFactory,
     #[Autowire(service: 'plugin.manager.views.argument')]
     private readonly ViewsHandlerManager $argumentManager,
@@ -82,6 +84,9 @@ final class FilterResolver {
       $multiple = !empty($options['break_phrase']);
       $handler_class = $this->argumentManager->getDefinition($plugin_id, FALSE)['class'] ?? NULL;
       $label = $options['admin_label'] ?? '';
+      if ($label === '' && count($bundles) === 1) {
+        $label = $this->entityTypeBundleInfo->getBundleInfo($entity_type_id)[$bundles[0]]['label'] ?? '';
+      }
       $filters[$id] = new SiftFilter(
         id: $id,
         pluginId: $plugin_id,
@@ -92,7 +97,7 @@ final class FilterResolver {
         supportsAll: $multiple && is_string($handler_class) && is_subclass_of($handler_class, ManyToOne::class),
         exceptionValue: $options['exception']['value'] ?? 'all',
         defaultAction: $options['default_action'] ?? 'ignore',
-        label: $label !== '' ? $label : $entity_type->getLabel(),
+        label: $label !== '' ? $label : $entity_type->getPluralLabel(),
       );
     }
     return $filters;
