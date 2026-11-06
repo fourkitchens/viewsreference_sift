@@ -5,5 +5,4 @@ package: Views
 core_version_requirement: ^11.3 || ^12
 dependencies:
   - viewsreference:viewsreference
-  - drupal:taxonomy
   - drupal:views

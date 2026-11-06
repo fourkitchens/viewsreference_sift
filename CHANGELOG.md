@@ -7,6 +7,7 @@
 - Resolves supported contextual filters with integer entity IDs in display
   order.
 - The setting is labeled Sift filters.
+- Taxonomy is no longer required.
 
 ### Added
 
