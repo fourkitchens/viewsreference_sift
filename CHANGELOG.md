@@ -12,6 +12,7 @@
 ### Added
 
 - Runs functional and JavaScript tests in CI with ChromeDriver.
+- Covers editor selections, the Views settings dialog, and AJAX paging in Chrome.
 - Adds a Views display extender for configuring contextual filters.
 - Enables the Sift display extender on install and update.
 - Adds configuration schema for exported Sift display settings.
