@@ -8,6 +8,10 @@
 - Requires PHP 8.3 or later.
 - Requires Views Reference 2.0.0-beta14 or later.
 
+### Added
+
+- Added level 6 PHPStan analysis for module code and tests.
+
 ## [1.0.0-beta1] - 2026-11-06
 
 ### Added
