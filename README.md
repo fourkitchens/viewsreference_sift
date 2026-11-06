@@ -94,9 +94,12 @@ the Sift selection wins.
 1. Turn on **Allow multiple values** if editors should select several
    items. **All** is available for filters that support it. Numeric and
    taxonomy depth filters use **Any**.
-1. Keep the exception value `all` to skip empty positions. To show all
-   results when no value is supplied, choose **Display all results for the
-   specified field** under **When the filter value is not available**.
+1. Under **When the filter value is not available**, choose how Views handles
+   an empty contextual filter. If a later filter has a Sift selection, Sift
+   passes the exception value for **Display all results for the specified
+   field**. For **Provide default value**, Sift uses the default when one is
+   available. Otherwise, Views stops at the empty filter and handles it as
+   it would without Sift.
 
 Sift shows one widget per supported and enabled filter, in display order.
 Selections on different filters apply together. For taxonomy filters in
