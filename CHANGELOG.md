@@ -5,6 +5,7 @@
 ### Fixed
 
 - Shows required-selection and configured limit instructions on filter inputs.
+- Names filters in their widget labels and inline error summary links.
 
 ### Changed
 
@@ -16,7 +17,7 @@
 ### Added
 
 - Runs functional and JavaScript tests in CI with ChromeDriver.
-- Covers editor selections, the Views settings dialog, and AJAX paging in Chrome.
+- Covers editor selections, Views settings, and AJAX paging in Chrome.
 - Adds a Views display extender for configuring contextual filters.
 - Enables the Sift display extender on install and update.
 - Adds configuration schema for exported Sift display settings.

@@ -168,7 +168,9 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
    * @phpstan-return array<string, mixed>
    */
   private function buildWidget(SiftFilter $filter, array $entities, array $ids): array {
-    $title = $filter->multiple ? $this->t('Select items') : $this->t('Select an item');
+    $title = $filter->multiple
+      ? $this->t('Select items for @label', ['@label' => $filter->label])
+      : $this->t('Select an item for @label', ['@label' => $filter->label]);
     $autocomplete = [
       '#type' => 'entity_autocomplete',
       '#target_type' => $filter->entityTypeId,

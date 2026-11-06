@@ -4,15 +4,21 @@ declare(strict_types=1);
 
 namespace Drupal\Tests\viewsreference_sift\FunctionalJavascript;
 
+// cspell:ignore Behat
+use Behat\Mink\Element\NodeElement;
 use Drupal\field\Entity\FieldConfig;
 use Drupal\field\Entity\FieldStorageConfig;
+use Drupal\FunctionalJavascriptTests\DrupalSelenium2Driver;
 use Drupal\FunctionalJavascriptTests\WebDriverTestBase;
 use Drupal\node\NodeInterface;
 use Drupal\taxonomy\Entity\Term;
 use Drupal\taxonomy\Entity\Vocabulary;
 use Drupal\Tests\field\Traits\EntityReferenceFieldCreationTrait;
+use Drupal\views\Entity\View;
+use Drupal\viewsreference_sift\Filter\SiftFilter;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
+use WebDriver\Key;
 
 /**
  * Tests how editors configure Sift through the Views Reference widget.
@@ -25,11 +31,12 @@ class SiftWidgetTest extends WebDriverTestBase {
 
   private const FIELD = 'field_listing[0]';
   private const SIFT = self::FIELD . '[options][sift_terms]';
+  private const OPTIONS = 'details[data-drupal-selector="edit-field-listing-0-options"]';
 
   /**
    * {@inheritdoc}
    */
-  protected static $modules = ['node', 'taxonomy', 'viewsreference_sift'];
+  protected static $modules = ['inline_form_errors', 'node', 'taxonomy', 'viewsreference_sift'];
 
   /**
    * {@inheritdoc}
@@ -150,6 +157,64 @@ class SiftWidgetTest extends WebDriverTestBase {
   }
 
   /**
+   * Tests fieldset legends, help text, and errors in the rendered widget.
+   */
+  public function testAccessibleWidgetMarkup(): void {
+    $view = View::load('viewsreference_sift_test');
+    $this->assertInstanceOf(View::class, $view);
+    $displays = $view->get('display');
+    $displays['embed_terms']['display_options']['display_extenders']['viewsreference_sift']['filters']['tid'] = [
+      'label' => 'Topics',
+      'description' => 'Choose the topics to show in this listing.',
+      'required' => TRUE,
+      'max' => 3,
+    ] + SiftFilter::DEFAULT_OPTIONS;
+    $view->set('display', $displays)->save();
+    $article = $this->drupalCreateNode([
+      'type' => 'article',
+      'title' => 'Editor listing',
+      'field_listing' => [
+        'target_id' => 'viewsreference_sift_test',
+        'display_id' => 'embed_terms',
+      ],
+    ]);
+    $this->drupalLogin($this->drupalCreateUser(['access content', 'edit any article content']));
+    $this->drupalGet($article->toUrl('edit-form'));
+
+    $assert = $this->assertSession();
+    $summary = $assert->elementExists('css', self::OPTIONS . ' > summary');
+    $this->sendKeys($summary, Key::ENTER);
+    $assert->elementAttributeExists('css', self::OPTIONS, 'open');
+
+    $filter = 'fieldset[data-drupal-selector="edit-field-listing-0-options-sift-terms-filters-tid"]';
+    $fieldset = $assert->elementExists('css', $filter);
+    $this->assertSame('Topics', $assert->elementExists('css', $filter . ' > legend')->getText());
+    $this->assertLinkedDescription($fieldset, 'Choose the topics to show in this listing.');
+    $match = $assert->elementExists('css', $filter . ' fieldset');
+    $this->assertSame('Match', $assert->elementExists('css', 'legend', $match)->getText());
+    $this->assertCount(2, $match->findAll('css', 'input[type="radio"]'));
+    $any = $assert->elementExists('css', 'input[value="any"]', $match);
+    $all = $assert->elementExists('css', 'input[value="all"]', $match);
+    $this->assertTrue($any->isChecked());
+    $this->sendKeys($any, Key::DOWN_ARROW);
+    $this->assertTrue($all->isChecked());
+
+    $name = self::SIFT . '[filters][tid][ids]';
+    $input = $assert->fieldExists($name);
+    $this->assertLinkedDescription($input, 'A selection is required.');
+    $this->assertLinkedDescription($input, 'Choose at most 3 items.');
+    $this->submitForm([], 'Save');
+
+    $input = $assert->fieldExists($name);
+    $this->assertSame('true', $input->getAttribute('aria-invalid'));
+    $message = $assert->elementExists('css', '.form-item--error-message', $input->getParent());
+    $this->assertSame('Choose at least one item for Topics.', $message->getText());
+    $this->assertTrue($message->isVisible());
+    $link = $assert->elementExists('css', 'a[href="#' . $input->getAttribute('id') . '"]');
+    $this->assertSame('Select items for Topics', $link->getText());
+  }
+
+  /**
    * Changes the display and waits for Views Reference to rebuild the field.
    */
   private function selectDisplay(string $display): void {
@@ -162,11 +227,25 @@ class SiftWidgetTest extends WebDriverTestBase {
    * Opens the Views Reference Options disclosure after a field rebuild.
    */
   private function openOptions(): void {
-    $selector = 'details[data-drupal-selector="edit-field-listing-0-options"]';
     $assert = $this->assertSession();
-    if (!$assert->elementExists('css', $selector)->hasAttribute('open')) {
-      $assert->elementExists('css', $selector . ' > summary')->click();
+    if (!$assert->elementExists('css', self::OPTIONS)->hasAttribute('open')) {
+      $assert->elementExists('css', self::OPTIONS . ' > summary')->click();
     }
+  }
+
+  /**
+   * Checks that visible help is referenced by the element's ARIA attribute.
+   */
+  private function assertLinkedDescription(NodeElement $element, string $text): void {
+    $ids = preg_split('/\s+/', (string) $element->getAttribute('aria-describedby'), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+    $this->assertNotEmpty($ids);
+    $descriptions = [];
+    foreach ($ids as $id) {
+      $description = $this->assertSession()->elementExists('css', '[id="' . $id . '"]');
+      $this->assertTrue($description->isVisible());
+      $descriptions[] = $description->getText();
+    }
+    $this->assertStringContainsString($text, implode(' ', $descriptions));
   }
 
   /**
@@ -176,13 +255,21 @@ class SiftWidgetTest extends WebDriverTestBase {
     $assert = $this->assertSession();
     $input = $assert->fieldExists(self::SIFT . '[filters][' . $filter . '][ids]');
     $existing = (string) $input->getValue();
-    $input->setValue($existing === '' ? $tag : $existing . ', ' . $tag);
-    $this->getSession()->getDriver()->keyDown($input->getXpath(), ' ');
+    $this->sendKeys($input, Key::END . ($existing === '' ? '' : ', ') . $tag);
     $result = $assert->waitOnAutocomplete();
     $this->assertNotNull($result);
     $this->assertSame($tag, $result->getText());
-    $result->click();
+    $this->sendKeys($input, Key::DOWN_ARROW . Key::ENTER);
     $assert->assertWaitOnAjaxRequest();
+  }
+
+  /**
+   * Sends native keyboard events to a browser element.
+   */
+  private function sendKeys(NodeElement $element, string $keys): void {
+    $driver = $this->getSession()->getDriver();
+    $this->assertInstanceOf(DrupalSelenium2Driver::class, $driver);
+    $driver->getWebDriverSession()->element('xpath', $element->getXpath())->postValue(['text' => $keys]);
   }
 
   /**
