@@ -13,26 +13,54 @@ use Drupal\viewsreference_sift\Selection\Selection;
 final class ArgumentBuilder {
 
   /**
-   * Replaces the argument at the selected filter's position.
+   * Merges selected values into the display's positional arguments.
    *
+   * @phpstan-param array<string, array{default_action?: string, exception?: array{value?: string}}> $arguments
    * @phpstan-param array<string, \Drupal\viewsreference_sift\Filter\SiftFilter> $filters
-   * @phpstan-param list<string> $existing
+   * @phpstan-param array<int, string|int|null> $existing
+   * @phpstan-param callable(string): ?string $defaultFor
    * @phpstan-return list<string>
    */
-  public function build(array $filters, Selection $selection, array $existing): array {
-    $filter = reset($filters);
-    if (!$filter) {
-      return $existing;
-    }
-    $value = $selection->filters[$filter->id] ?? NULL;
-    if (!$value || !$value->ids) {
-      return $existing;
+  public function build(array $arguments, array $filters, Selection $selection, array $existing, callable $defaultFor): array {
+    $values = [];
+    foreach ($existing as $position => $value) {
+      if ($value !== NULL && $value !== '') {
+        $values[$position] = (string) $value;
+      }
     }
 
-    $delimiter = $filter->supportsAll && $value->match === MatchMode::All ? ',' : '+';
-    $existing[$filter->position] = implode($delimiter, $value->ids);
-    ksort($existing);
-    return array_values($existing);
+    foreach ($filters as $id => $filter) {
+      $selected = $selection->filters[$id] ?? NULL;
+      if (!$selected || $selected->ids === []) {
+        continue;
+      }
+
+      $ids = $filter->multiple ? $selected->ids : [$selected->ids[0]];
+      $delimiter = $filter->supportsAll && $selected->match === MatchMode::All ? ',' : '+';
+      $values[$filter->position] = implode($delimiter, $ids);
+    }
+
+    if ($values === []) {
+      return [];
+    }
+
+    $argument_ids = array_keys($arguments);
+    $last_position = max(array_keys($values));
+    $merged = [];
+    for ($position = 0; $position <= $last_position; $position++) {
+      if (isset($values[$position])) {
+        $merged[] = $values[$position];
+        continue;
+      }
+
+      $id = $argument_ids[$position] ?? NULL;
+      $argument = $id !== NULL ? $arguments[$id] : [];
+      $default = $id !== NULL && ($argument['default_action'] ?? NULL) === 'default'
+        ? $defaultFor($id)
+        : NULL;
+      $merged[] = $default ?? $argument['exception']['value'] ?? 'all';
+    }
+    return $merged;
   }
 
 }

@@ -32,6 +32,7 @@
 - Caps each filter at 10 selections.
 - Drops selected IDs that no longer exist or fall outside the allowed bundles.
 - Applies validated Sift selections after the other Views Reference settings.
+- Fills gaps in the argument list with the display's defaults or exceptions.
 
 ### Added
 

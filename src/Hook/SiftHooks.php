@@ -6,6 +6,7 @@ namespace Drupal\viewsreference_sift\Hook;
 
 use Drupal\Core\Hook\Attribute\Hook;
 use Drupal\Core\Hook\Order\Order;
+use Drupal\views\Plugin\views\argument\ArgumentPluginBase;
 use Drupal\views\ViewExecutable;
 use Drupal\viewsreference_sift\Argument\ArgumentBuilder;
 use Drupal\viewsreference_sift\Filter\FilterResolver;
@@ -49,7 +50,7 @@ final class SiftHooks {
   /**
    * Applies the selection after Views Reference has set its arguments.
    *
-   * @phpstan-param list<string> $args
+   * @phpstan-param array<int, int|string|null> $args
    */
   #[Hook('views_pre_view', order: Order::Last)]
   public function applySelection(ViewExecutable $view, string $display_id, array &$args): void {
@@ -61,9 +62,18 @@ final class SiftHooks {
 
     $filters = array_intersect_key($this->filterResolver->forView($view), array_fill_keys($pending['filter_ids'], TRUE));
     $selection = $this->selectionNormalizer->fromStorage($pending['data'], $filters);
-    if (!$selection->isEmpty()) {
-      $args = $this->argumentBuilder->build($filters, $selection, $args);
+    if ($selection->isEmpty()) {
+      return;
     }
+
+    $display = $view->display_handler;
+    $arguments = $display->getOption('arguments') ?? [];
+    $default_for = static function (string $argument_id) use ($display): ?string {
+      $handler = $display->getHandler('argument', $argument_id);
+      $default = $handler instanceof ArgumentPluginBase ? $handler->getDefaultArgument() : NULL;
+      return is_scalar($default) && $default !== FALSE ? (string) $default : NULL;
+    };
+    $args = $this->argumentBuilder->build($arguments, $filters, $selection, $args, $default_for);
   }
 
 }

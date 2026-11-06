@@ -41,38 +41,36 @@ final class FilterResolver {
     /** @var array<string, array{plugin_id?: string, break_phrase?: bool, validate?: array{type?: string}, validate_options?: array{bundles?: string[]}, exception?: array{value?: string}, default_action?: string, admin_label?: string}> $arguments */
     $arguments = $display?->getOption('arguments') ?? [];
 
-    // The proof of concept only supports the first contextual argument.
-    $id = array_key_first($arguments);
-    if ($id === NULL) {
-      return [];
-    }
-    $argument = $arguments[$id];
-    $plugin_id = $argument['plugin_id'] ?? '';
-    if (!in_array($plugin_id, ['taxonomy_index_tid', 'taxonomy_index_tid_depth'], TRUE)) {
-      return [];
-    }
+    foreach (array_keys($arguments) as $position => $id) {
+      $argument = $arguments[$id];
+      $plugin_id = $argument['plugin_id'] ?? '';
+      if (!in_array($plugin_id, ['taxonomy_index_tid', 'taxonomy_index_tid_depth'], TRUE)) {
+        continue;
+      }
 
-    $entity_type_id = 'taxonomy_term';
-    $bundles = ($argument['validate']['type'] ?? NULL) === 'entity:taxonomy_term'
-      ? array_values(array_filter($argument['validate_options']['bundles'] ?? []))
-      : [];
-    $multiple = !empty($argument['break_phrase']);
-    $handler_class = $this->argumentManager->getDefinition($plugin_id, FALSE)['class'] ?? '';
-    $label = $argument['admin_label'] ?? '';
+      $entity_type_id = 'taxonomy_term';
+      $bundles = ($argument['validate']['type'] ?? NULL) === 'entity:taxonomy_term'
+        ? array_values(array_filter($argument['validate_options']['bundles'] ?? []))
+        : [];
+      $multiple = !empty($argument['break_phrase']);
+      $handler_class = $this->argumentManager->getDefinition($plugin_id, FALSE)['class'] ?? '';
+      $label = $argument['admin_label'] ?? '';
 
-    $filter = new SiftFilter(
-      id: $id,
-      pluginId: $plugin_id,
-      position: 0,
-      entityTypeId: $entity_type_id,
-      bundles: $bundles,
-      multiple: $multiple,
-      supportsAll: $multiple && is_a($handler_class, ManyToOne::class, TRUE),
-      exceptionValue: $argument['exception']['value'] ?? 'all',
-      defaultAction: $argument['default_action'] ?? 'ignore',
-      label: $label !== '' ? $label : $this->entityTypeManager->getDefinition($entity_type_id)->getLabel(),
-    );
-    return [$id => $filter];
+      $filter = new SiftFilter(
+        id: $id,
+        pluginId: $plugin_id,
+        position: $position,
+        entityTypeId: $entity_type_id,
+        bundles: $bundles,
+        multiple: $multiple,
+        supportsAll: $multiple && is_a($handler_class, ManyToOne::class, TRUE),
+        exceptionValue: $argument['exception']['value'] ?? 'all',
+        defaultAction: $argument['default_action'] ?? 'ignore',
+        label: $label !== '' ? $label : $this->entityTypeManager->getDefinition($entity_type_id)->getLabel(),
+      );
+      return [$id => $filter];
+    }
+    return [];
   }
 
   /**
