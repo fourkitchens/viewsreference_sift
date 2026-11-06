@@ -5,6 +5,10 @@ Views Reference Sift follows [Semantic Versioning][semver].
 
 ## [Unreleased]
 
+### Added
+
+- Adds a Drupal Help page with field and display setup instructions.
+
 ## [1.0.0-beta3] - 2026-11-06
 
 ### Fixed
