@@ -29,21 +29,27 @@ above opts in to beta releases for both packages.
 ## Set up the field
 
 1. Enable the Views Reference Sift module.
-2. In the Views Reference field settings, enable **Terms** and leave
-   **Argument** unchecked. Both settings write contextual arguments to the
-   embedded View.
+2. In the Views Reference field settings, enable **Terms**.
 3. When editing content, select a View and display. **Terms** appears under
    **Options**, alongside **Items per page** when the limit setting is enabled.
-   Select terms and choose **Any of these terms** or **All of these terms**.
-   Leave the selection empty to use the display's behavior for a missing
-   contextual argument.
+   Select terms and choose **Any of these terms** or **All of these terms**
+   when the filter supports both modes.
+   Leave the selection empty to let the Argument setting or the display
+   supply the value.
+
+### Using Sift with the Argument setting
+
+Enable both **Terms** and **Argument** when they fill different contextual
+argument positions. Sift's selection wins when both settings fill the same
+position. The display's configured default or exception value fills any gap
+before the last supplied argument.
 
 ## Configure the View
 
-Views Reference Sift uses the display's first contextual filter. Add
-**Has taxonomy term ID** as that filter and configure it as follows.
+Views Reference Sift uses the first supported contextual filter on the display.
+Add **Has taxonomy term ID** and configure it as follows.
 
-- Enable **Allow multiple values**.
+- Enable **Allow multiple values** to select more than one term.
 - Under **When the filter value is not available**, select
   **Display all results for the specified field**.
 - Set the exception value to `all`.
@@ -53,9 +59,8 @@ Views Reference Sift uses the display's first contextual filter. Add
 - Enable **Reduce duplicates** if you want a single result for content tagged
   with multiple selected terms in **Any** mode.
 
-You can also use **Has taxonomy term ID (with depth)** as the first contextual
-filter. It always matches **Any** selected term. A positive depth also matches
-child terms.
+You can also use **Has taxonomy term ID (with depth)**. It always matches
+**Any** selected term. A positive depth also matches child terms.
 
 AJAX pagers and exposed forms keep the selected terms. A **More** link passes
 them to its target page display when that display uses the same contextual
