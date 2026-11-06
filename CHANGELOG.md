@@ -15,6 +15,7 @@
 - Applied the Views Reference setting discovery patch in Drupal 12 CI.
 - Documented the Views Reference requirement for Drupal 12 setting discovery.
 - Extracted resolution of the first supported Views contextual filter.
+- Added selection value objects and normalization for saved term settings.
 
 ### Added
 
