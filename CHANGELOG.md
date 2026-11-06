@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Requires Drupal 11.3 or later; Drupal 10 is no longer supported.
+- Requires PHP 8.3 or later.
+- Requires Views Reference 2.0.0-beta14 or later.
+
 ## [1.0.0-beta1] - 2026-11-06
 
 ### Added
