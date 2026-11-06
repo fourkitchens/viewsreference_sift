@@ -1,6 +1,6 @@
 # Contributing to Views Reference Sift
 
-<!-- cspell:words ddev docroot packagist phpcbf -->
+<!-- cspell:words ddev docroot phpcbf -->
 
 ## Set up local development
 
@@ -67,7 +67,7 @@ ddev phpunit
    in `git tag -a VERSION -m VERSION` and `git push origin VERSION`.
 3. Publish a GitHub release using the version's changelog section as its
    notes. Mark beta and release candidate versions as pre-releases.
-4. Verify the tagged version appears on Packagist once the package is
-   registered.
-   [Packagist package](https://packagist.org/packages/fourkitchens/viewsreference_sift)
+4. Push the same tag to the Drupal.org Git repository. Use **Add new release**
+   on the project page, select the tag, and reuse the GitHub release notes.
+   [Drupal.org project page](https://www.drupal.org/project/viewsreference_sift)
 5. Update the `sous-content-list` dependency when it needs the new release.

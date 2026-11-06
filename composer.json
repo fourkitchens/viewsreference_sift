@@ -1,12 +1,12 @@
 {
-  "name": "fourkitchens/viewsreference_sift",
+  "name": "drupal/viewsreference_sift",
   "description": "Narrow a Views Reference field's embedded View by taxonomy terms.",
   "type": "drupal-module",
   "license": "GPL-2.0-or-later",
-  "homepage": "https://github.com/fourkitchens/viewsreference_sift",
+  "homepage": "https://www.drupal.org/project/viewsreference_sift",
   "support": {
-    "issues": "https://github.com/fourkitchens/viewsreference_sift/issues",
-    "source": "https://github.com/fourkitchens/viewsreference_sift"
+    "issues": "https://www.drupal.org/project/issues/viewsreference_sift",
+    "source": "https://git.drupalcode.org/project/viewsreference_sift"
   },
   "require": {
     "php": ">=8.3",
@@ -16,12 +16,6 @@
   "require-dev": {
     "drupal/coder": "^9.0"
   },
-  "repositories": [
-    {
-      "type": "composer",
-      "url": "https://packages.drupal.org/8"
-    }
-  ],
   "minimum-stability": "beta",
   "prefer-stable": true,
   "config": {

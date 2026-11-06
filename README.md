@@ -5,7 +5,7 @@ View. It is for site builders who want to reuse one listing across several
 pages. [Views Reference Field Filter][exposed] reuses exposed filters, while
 Sift supplies contextual filter values without requiring an exposed form.
 
-[Repository][repo] · [Issue queue][issues] · [Packagist][packagist]
+[Repository][repo] · [Issue queue][issues] · [Drupal.org project][project]
 
 
 ## Table of contents
@@ -45,11 +45,11 @@ discovery depends on the [upstream Views Reference fix][drupal-12].
 
 ## Installation
 
-1. Once the package is listed on [Packagist][packagist], run these commands
+1. Once a release is available on [Drupal.org][project], run these commands
    from your Drupal project's Composer root.
 
    ```sh
-   composer require 'fourkitchens/viewsreference_sift:^1.0@beta' \
+   composer require 'drupal/viewsreference_sift:^1.0@beta' \
      'drupal/viewsreference:^2.0.0-beta14'
    drush en viewsreference_sift
    ```
@@ -227,9 +227,6 @@ visitors can turn off Sift for their own page view. Drupal core varies the
 cache by URL for displays with contextual filters, so the override is confined
 to requests for that URL.
 
-**Is this project on Drupal.org?** Not yet. The code, issue queue, and
-releases are on GitHub. [Packagist][packagist] is the Composer package page.
-
 
 ## Maintainers
 
@@ -239,7 +236,7 @@ development and [SECURITY.md] for private reports.
 
 [repo]: https://github.com/fourkitchens/viewsreference_sift
 [issues]: https://github.com/fourkitchens/viewsreference_sift/issues
-[packagist]: https://packagist.org/packages/fourkitchens/viewsreference_sift
+[project]: https://www.drupal.org/project/viewsreference_sift
 [exposed]: https://www.drupal.org/project/viewsreference_filter
 [viewsreference]: https://www.drupal.org/project/viewsreference
 [inline-errors]: https://www.drupal.org/docs/8/core/modules/inline-form-errors
