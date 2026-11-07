@@ -5,7 +5,7 @@ View. It is for site builders who want to reuse one listing across several
 pages. [Views Reference Field Filter][exposed] reuses exposed filters, while
 Sift supplies contextual filter values without requiring an exposed form.
 
-[Repository][repo] · [Issue queue][issues] · [Drupal.org project][project]
+[Repository][repo] · [Issue queue][issues]
 
 
 ## Table of contents
@@ -49,11 +49,13 @@ fix. [Views Reference issue #3583101][drupal-12]
 
 ## Installation
 
-1. Once a release is available on [Drupal.org][project], run these commands
-   from your Drupal project's Composer root.
+1. Add the GitHub repository and install Sift from your Drupal project's
+   Composer root.
 
    ```sh
-   composer require 'drupal/viewsreference_sift:^1.0@beta' \
+   composer config repositories.viewsreference-sift vcs \
+     https://github.com/fourkitchens/viewsreference_sift.git
+   composer require 'fourkitchens/viewsreference_sift:^1.0@beta' \
      'drupal/viewsreference:^2.0.0-beta14'
    drush en viewsreference_sift
    ```
@@ -343,7 +345,6 @@ development and [SECURITY.md] for private reports.
 
 [repo]: https://github.com/fourkitchens/viewsreference_sift
 [issues]: https://github.com/fourkitchens/viewsreference_sift/issues
-[project]: https://www.drupal.org/project/viewsreference_sift
 [exposed]: https://www.drupal.org/project/viewsreference_filter
 [viewsreference]: https://www.drupal.org/project/viewsreference
 [drush]: https://www.drush.org/13.x/

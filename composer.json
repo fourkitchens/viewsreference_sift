@@ -1,12 +1,12 @@
 {
-  "name": "drupal/viewsreference_sift",
+  "name": "fourkitchens/viewsreference_sift",
   "description": "Lets editors narrow a Views Reference field's embedded View by choosing entities for its contextual filters.",
   "type": "drupal-module",
   "license": "GPL-2.0-or-later",
-  "homepage": "https://www.drupal.org/project/viewsreference_sift",
+  "homepage": "https://github.com/fourkitchens/viewsreference_sift",
   "support": {
-    "issues": "https://www.drupal.org/project/issues/viewsreference_sift",
-    "source": "https://git.drupalcode.org/project/viewsreference_sift"
+    "issues": "https://github.com/fourkitchens/viewsreference_sift/issues",
+    "source": "https://github.com/fourkitchens/viewsreference_sift"
   },
   "require": {
     "php": ">=8.3",
@@ -17,6 +17,12 @@
     "drupal/coder": "^9.0",
     "drush/drush": "^13"
   },
+  "repositories": [
+    {
+      "type": "composer",
+      "url": "https://packages.drupal.org/8"
+    }
+  ],
   "minimum-stability": "beta",
   "prefer-stable": true,
   "config": {
