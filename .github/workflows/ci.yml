@@ -39,7 +39,8 @@ jobs:
           composer config minimum-stability beta
           composer config prefer-stable true
           composer config repositories.viewsreference-sift path "$GITHUB_WORKSPACE"
-          composer require --no-interaction --with-all-dependencies 'drupal/viewsreference_sift:*@dev' 'drupal/core-dev:^11'
+          composer require --no-interaction --with-all-dependencies \
+            'drupal/viewsreference_sift:*@dev' 'drupal/core-dev:^11' 'drush/drush:^13'
       - name: Run PHPStan
         working-directory: ${{ runner.temp }}/site
         run: vendor/bin/phpstan analyze --configuration=web/modules/contrib/viewsreference_sift/phpstan.neon.dist --no-progress
