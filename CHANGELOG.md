@@ -35,6 +35,9 @@ Views Reference Sift follows [Semantic Versioning][semver].
 - Updates the security reporting policy for Drupal.org.
 - Updates the module and package descriptions to reflect entity selection
   for contextual filters.
+- Enables strict typing in the Sift setting plugin.
+- Reuses resolved Sift filters when applying selections during rendering.
+- Updates the checkout, cache, and artifact CI actions to Node 24 releases.
 
 ### Security
 

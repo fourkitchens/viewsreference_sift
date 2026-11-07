@@ -14,7 +14,6 @@ use Drupal\Core\StringTranslation\TranslatableMarkup;
 use Drupal\views\Plugin\views\argument\ArgumentPluginBase;
 use Drupal\views\ViewExecutable;
 use Drupal\viewsreference_sift\Argument\ArgumentBuilder;
-use Drupal\viewsreference_sift\Filter\FilterResolver;
 use Drupal\viewsreference_sift\Selection\SelectionNormalizer;
 
 /**
@@ -28,7 +27,6 @@ final class SiftHooks {
    * Injects the services that turn saved choices into contextual arguments.
    */
   public function __construct(
-    private readonly FilterResolver $filterResolver,
     private readonly SelectionNormalizer $selectionNormalizer,
     private readonly ArgumentBuilder $argumentBuilder,
   ) {}
@@ -91,7 +89,7 @@ final class SiftHooks {
       return;
     }
 
-    $filters = array_intersect_key($this->filterResolver->forView($view), array_fill_keys($pending['filter_ids'], TRUE));
+    $filters = $pending['filters'];
     $selection = $this->selectionNormalizer->fromStorage($pending['data'], $filters);
     if ($selection->isEmpty()) {
       return;

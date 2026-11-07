@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Drupal\viewsreference_sift\Plugin\ViewsReferenceSetting;
 
 use Drupal\Component\Plugin\PluginBase;
@@ -276,7 +278,7 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
     if (!$selection->isEmpty()) {
       $view->element['#viewsreference_sift']['selection'] = [
         'data' => $this->selectionNormalizer->toStorage($selection),
-        'filter_ids' => array_keys($filters),
+        'filters' => array_filter($filters, static fn (SiftFilter $filter): bool => $filter->enabled),
         'display_id' => $view->current_display,
       ];
     }
