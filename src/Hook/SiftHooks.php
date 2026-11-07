@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Drupal\viewsreference_sift\Hook;
 
 use Drupal\Core\Hook\Attribute\Hook;
+use Drupal\Core\Hook\Attribute\ReorderHook;
 use Drupal\Core\Hook\Order\Order;
+use Drupal\Core\Hook\Order\OrderBefore;
 use Drupal\Core\Routing\RouteMatchInterface;
 use Drupal\Core\StringTranslation\StringTranslationTrait;
 use Drupal\Core\StringTranslation\TranslatableMarkup;
@@ -48,11 +50,16 @@ final class SiftHooks {
   }
 
   /**
-   * Captures the server-set selection before Views Reference reads the request.
+   * Captures the trusted selection from the field render array.
+   *
+   * Runs before Views Reference can replace the field metadata with the
+   * viewsreference query parameter. Page requests trust this snapshot.
+   * Drupal applies ReorderHook after ordering declared on Hook attributes.
    *
    * @phpstan-param array<array-key, mixed> $args
    */
-  #[Hook('views_pre_view', order: Order::First)]
+  #[Hook('views_pre_view')]
+  #[ReorderHook('views_pre_view', self::class, 'snapshot', order: new OrderBefore(modules: ['viewsreference']))]
   public function snapshot(ViewExecutable $view, string $display_id, array &$args): void {
     if (isset($view->element['#viewsreference_sift']['checked'])) {
       return;
@@ -70,6 +77,9 @@ final class SiftHooks {
 
   /**
    * Merges Sift choices with the arguments already supplied by Views Reference.
+   *
+   * Runs last so the validated Sift selection takes precedence after the
+   * other Views Reference settings have supplied their arguments.
    *
    * @phpstan-param array<int, int|string|null> $args
    */

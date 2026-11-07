@@ -25,6 +25,7 @@ use Drupal\views\ViewExecutable;
 use Drupal\views\Views;
 use Drupal\viewsreference_sift\Filter\FilterResolver;
 use Drupal\viewsreference_sift\Filter\SiftFilter;
+use Drupal\viewsreference_sift\Hook\SiftHooks;
 use Drupal\viewsreference_sift\Plugin\views\display_extender\SiftDisplayExtender;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
@@ -673,6 +674,18 @@ class SiftTermsTest extends KernelTestBase {
       $this->storedSelection('tid', [$this->termIds['B'], $this->termIds['A']], 'all'),
       $form_state->getValue($field['#parents']),
     );
+  }
+
+  /**
+   * Tests that Sift hooks run on either side of Views Reference.
+   */
+  public function testPreViewHookOrder(): void {
+    $order = [];
+    \Drupal::moduleHandler()->invokeAllWith('views_pre_view', static function (callable $implementation, string $module) use (&$order): void {
+      $order[] = is_array($implementation) && $implementation[0] instanceof SiftHooks ? $implementation[1] : $module;
+    });
+
+    $this->assertSame(['snapshot', 'viewsreference', 'applySelection'], $order);
   }
 
   /**
