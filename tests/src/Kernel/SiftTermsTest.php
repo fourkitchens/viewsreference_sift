@@ -205,6 +205,7 @@ class SiftTermsTest extends KernelTestBase {
       $this->assertSame($multiple, $widget['#tags']);
       if ($multiple) {
         $this->assertSame(['any', 'all'], array_keys($group['match']['#options']));
+        $this->assertSame('Choose at most 10 items.', (string) $widget['#description']);
       }
       else {
         $this->assertArrayNotHasKey('match', $group);
@@ -369,6 +370,79 @@ class SiftTermsTest extends KernelTestBase {
   }
 
   /**
+   * Tests single-value radios and normalization of scalar values.
+   */
+  #[DataProvider('singleValueRequirements')]
+  public function testSingleValueChoiceWidget(bool $required): void {
+    $view = View::load('viewsreference_sift_test');
+    $this->assertInstanceOf(View::class, $view);
+    $displays = $view->get('display');
+    $displays['embed_terms']['display_options']['arguments']['tid']['break_phrase'] = FALSE;
+    $view->set('display', $displays)->save();
+    $this->saveTermOptions(['label' => 'Topics', 'widget' => 'checkboxes', 'required' => $required]);
+
+    $stored = $this->storedSelection('tid', [$this->termIds['B']]);
+    $field = $this->termsElement('embed_terms', $stored);
+    $widget = $field['filters']['tid']['ids'];
+    $this->assertSame('radios', $widget['#type']);
+    $this->assertSame((string) $this->termIds['B'], $widget['#default_value']);
+    $options = [$this->termIds['A'] => 'A', $this->termIds['B'] => 'B'];
+    $this->assertSame($required ? $options : ['' => 'None'] + $options, array_map('strval', $widget['#options']));
+    $this->assertSame('radiogroup', $field['filters']['tid']['#attributes']['role']);
+    $this->assertSame($required ? 'true' : NULL, $field['filters']['tid']['#attributes']['aria-required'] ?? NULL);
+    $this->assertArrayNotHasKey('#required', $widget);
+    $this->assertSame($required ? 'A selection is required.' : '', (string) ($widget['#description'] ?? ''));
+
+    $empty = $this->termsElement('embed_terms')['filters']['tid']['ids'];
+    $this->assertSame($required ? NULL : '', $empty['#default_value']);
+    $field['#parents'] = ['field_listing', 0, 'options', 'sift_terms'];
+    $callback = $field['#element_validate'][0];
+    $this->assertIsCallable($callback);
+    foreach ([(string) $this->termIds['B'], ''] as $value) {
+      $form_state = new FormState();
+      $form_state->setValue(['field_listing', 0, 'display_id'], 'embed_terms');
+      $form_state->setValue([...$field['#parents'], 'filters', 'tid', 'ids'], $value);
+      $callback($field, $form_state);
+      $expected = $value === '' ? ['version' => 2, 'filters' => []] : $stored;
+      $this->assertSame($expected, $form_state->getValue($field['#parents']));
+      $errors = $required && $value === ''
+        ? ['field_listing][0][options][sift_terms][filters][tid][ids' => 'Choose at least one item for Topics.']
+        : [];
+      $this->assertSame($errors, array_map('strval', $form_state->getErrors()));
+      $form_state->clearErrors();
+    }
+  }
+
+  /**
+   * Provides optional and required single-value filters.
+   *
+   * @phpstan-return array<string, array{bool}>
+   */
+  public static function singleValueRequirements(): array {
+    return ['optional' => [FALSE], 'required' => [TRUE]];
+  }
+
+  /**
+   * Tests required state for the multiple-value widget types.
+   */
+  public function testRequiredWidgetState(): void {
+    foreach (['autocomplete', 'select', 'checkboxes'] as $type) {
+      $this->saveTermOptions(['label' => 'Topics', 'widget' => $type, 'required' => TRUE]);
+      $field = $this->termsElement('embed_terms');
+      $widget = $field['filters']['tid']['ids'];
+      $this->assertSame('A selection is required. Choose at most 10 items.', (string) $widget['#description']);
+      if ($type === 'checkboxes') {
+        $this->assertTrue($widget['#required']);
+        $this->assertSame('Choose at least one item for Topics.', (string) $widget['#required_error']);
+      }
+      else {
+        $this->assertSame('true', $widget['#attributes']['aria-required']);
+        $this->assertArrayNotHasKey('#required', $widget);
+      }
+    }
+  }
+
+  /**
    * Tests the option count limit for non-autocomplete widgets.
    */
   public function testLargeDisplayChoiceWidgetFallsBack(): void {
@@ -386,7 +460,7 @@ class SiftTermsTest extends KernelTestBase {
       $this->saveTermOptions(['widget' => $type]);
       $widget = $this->termsElement('embed_terms')['filters']['tid']['ids'];
       $this->assertSame('entity_autocomplete', $widget['#type']);
-      $this->assertSame('More than 100 items are available. Use autocomplete to find an item.', (string) $widget['#description']);
+      $this->assertSame('Choose at most 10 items. More than 100 items are available. Use autocomplete to find an item.', (string) $widget['#description']);
     }
   }
 

@@ -27,6 +27,8 @@ Views Reference Sift follows [Semantic Versioning][semver].
 
 ### Changed
 
+- Uses radio buttons for single-value checkbox widgets, exposes required
+  input states, and shows selection limits even when the default is used.
 - Clarifies which Sift values come from the field or browser and why
   contextual filters must never control access.
 - The Composer package is now `drupal/viewsreference_sift`.

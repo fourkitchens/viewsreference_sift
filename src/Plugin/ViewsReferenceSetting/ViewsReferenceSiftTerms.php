@@ -145,12 +145,16 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
       $help = [];
       if ($filter->required) {
         $help[] = $this->t('A selection is required.');
+        if ($widget['#type'] === 'checkboxes') {
+          $widget['#required'] = TRUE;
+          $widget['#required_error'] = $this->t('Choose at least one item for @label.', ['@label' => $filter->label]);
+        }
+        elseif ($widget['#type'] !== 'radios') {
+          $widget['#attributes']['aria-required'] = 'true';
+        }
       }
-      if ($filter->multiple && $filter->max !== SiftFilter::DEFAULT_MAX) {
+      if ($filter->multiple) {
         $help[] = $this->formatPlural($filter->max, 'Choose at most one item.', 'Choose at most @count items.');
-      }
-      elseif (!$filter->multiple && $widget['#type'] === 'checkboxes') {
-        $help[] = $this->t('Choose at most one item.');
       }
       if ($help) {
         $help[] = $widget['#description'] ?? '';
@@ -163,6 +167,12 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
         '#title' => $filter->label,
         'ids' => $widget,
       ];
+      if ($widget['#type'] === 'radios') {
+        $group['#attributes']['role'] = 'radiogroup';
+        if ($filter->required) {
+          $group['#attributes']['aria-required'] = 'true';
+        }
+      }
       if ($filter->description !== '') {
         $group['#description'] = $filter->description;
       }
@@ -240,6 +250,13 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
       '#options' => array_map([Html::class, 'decodeEntities'], $options),
       '#default_value' => $default_ids,
     ];
+    if (!$filter->multiple && $filter->widget === 'checkboxes') {
+      $widget['#type'] = 'radios';
+      $widget['#default_value'] = $default_ids[0] ?? ($filter->required ? NULL : '');
+      if (!$filter->required) {
+        $widget['#options'] = ['' => $this->t('None')] + $widget['#options'];
+      }
+    }
     if ($filter->widget === 'select') {
       $widget['#multiple'] = $filter->multiple;
       if (!$filter->multiple) {

@@ -160,6 +160,10 @@ class SiftWidgetTest extends WebDriverTestBase {
    * Tests fieldset legends, help text, and errors in the rendered widget.
    */
   public function testAccessibleWidgetMarkup(): void {
+    $alpha = Term::create(['vid' => 'tags', 'name' => 'Alpha topic']);
+    $alpha->save();
+    $beta = Term::create(['vid' => 'tags', 'name' => 'Beta topic']);
+    $beta->save();
     $view = View::load('viewsreference_sift_test');
     $this->assertInstanceOf(View::class, $view);
     $displays = $view->get('display');
@@ -167,7 +171,11 @@ class SiftWidgetTest extends WebDriverTestBase {
       'label' => 'Topics',
       'description' => 'Choose the topics to show in this listing.',
       'required' => TRUE,
-      'max' => 3,
+    ] + SiftFilter::DEFAULT_OPTIONS;
+    $displays['embed_depth']['display_options']['arguments']['term_node_tid_depth']['break_phrase'] = FALSE;
+    $displays['embed_depth']['display_options']['display_extenders']['viewsreference_sift']['filters']['term_node_tid_depth'] = [
+      'label' => 'Single topic',
+      'widget' => 'checkboxes',
     ] + SiftFilter::DEFAULT_OPTIONS;
     $view->set('display', $displays)->save();
     $article = $this->drupalCreateNode([
@@ -201,10 +209,12 @@ class SiftWidgetTest extends WebDriverTestBase {
 
     $name = self::SIFT . '[filters][tid][ids]';
     $input = $assert->fieldExists($name);
+    $this->assertSame('true', $input->getAttribute('aria-required'));
     $this->assertLinkedDescription($input, 'A selection is required.');
-    $this->assertLinkedDescription($input, 'Choose at most 3 items.');
+    $this->assertLinkedDescription($input, 'Choose at most 10 items.');
     $this->submitForm([], 'Save');
 
+    $this->assertNotNull($assert->waitForElementVisible('css', $filter . ' .form-item--error-message'), 'An empty required selection must return a visible inline error.');
     $input = $assert->fieldExists($name);
     $this->assertSame('true', $input->getAttribute('aria-invalid'));
     $message = $assert->elementExists('css', '.form-item--error-message', $input->getParent());
@@ -212,6 +222,70 @@ class SiftWidgetTest extends WebDriverTestBase {
     $this->assertTrue($message->isVisible());
     $link = $assert->elementExists('css', 'a[href="#' . $input->getAttribute('id') . '"]');
     $this->assertSame('Select items for Topics', $link->getText());
+
+    $this->selectDisplay('embed_depth');
+    $this->openOptions();
+    $name = self::SIFT . '[filters][term_node_tid_depth][ids]';
+    $radios = 'input[type="radio"][name="' . $name . '"]';
+    $assert->elementsCount('css', $radios, 3);
+    $assert->elementNotExists('css', 'input[type="checkbox"][name^="' . $name . '"]');
+    $none = $assert->elementExists('css', $radios . '[value=""]');
+    $this->assertSame('None', $assert->elementExists('css', 'label[for="' . $none->getAttribute('id') . '"]')->getText());
+    $this->assertTrue($none->isChecked());
+    $this->assertNotSame('true', $none->getAttribute('aria-required'));
+    $this->sendKeys($none, Key::DOWN_ARROW);
+    $this->assertTrue($assert->elementExists('css', $radios . '[value="' . $alpha->id() . '"]')->isChecked());
+    $this->assertFalse($none->isChecked());
+    $this->submitForm([], 'Save');
+    $assert->statusMessageContains('has been updated.', 'status');
+    $saved = $this->savedListing($article);
+    $this->assertSame([
+      'version' => 2,
+      'filters' => [
+        'term_node_tid_depth' => ['ids' => [(int) $alpha->id()], 'match' => 'any'],
+      ],
+    ], $saved['settings']['sift_terms']);
+
+    $this->drupalGet($article->toUrl('edit-form'));
+    $this->openOptions();
+    $this->assertTrue($assert->elementExists('css', $radios . '[value="' . $alpha->id() . '"]')->isChecked());
+    $assert->elementExists('css', $radios . '[value=""]')->click();
+    $this->submitForm([], 'Save');
+    $assert->statusMessageContains('has been updated.', 'status');
+    $saved = $this->savedListing($article);
+    $this->assertSame(['version' => 2, 'filters' => []], $saved['settings']['sift_terms']);
+
+    $displays['embed_depth']['display_options']['display_extenders']['viewsreference_sift']['filters']['term_node_tid_depth']['required'] = TRUE;
+    $view->set('display', $displays)->save();
+    $this->drupalGet($article->toUrl('edit-form'));
+    $this->openOptions();
+    $assert->elementsCount('css', $radios, 2);
+    $assert->elementNotExists('css', $radios . '[value=""]');
+    $group = $assert->elementExists('css', 'fieldset[data-drupal-selector="edit-field-listing-0-options-sift-terms-filters-term-node-tid-depth"]');
+    $this->assertSame('radiogroup', $group->getAttribute('role'));
+    $this->assertSame('true', $group->getAttribute('aria-required'));
+    foreach ($this->getSession()->getPage()->findAll('css', $radios) as $radio) {
+      $this->assertFalse($radio->hasAttribute('aria-required'));
+      $this->assertFalse($radio->hasAttribute('required'));
+    }
+
+    $displays['embed_terms']['display_options']['display_extenders']['viewsreference_sift']['filters']['tid']['widget'] = 'checkboxes';
+    $view->set('display', $displays)->save();
+    $this->drupalGet($article->toUrl('edit-form'));
+    $this->selectDisplay('embed_terms');
+    $this->openOptions();
+    $checkboxes = 'input[type="checkbox"][name^="' . self::SIFT . '[filters][tid][ids]"]';
+    $assert->elementsCount('css', $checkboxes, 2);
+    $assert->elementNotExists('css', $checkboxes . '[required]');
+    $assert->fieldExists(self::FIELD . '[target_id]')->selectOption('_none');
+    $assert->assertWaitOnAjaxRequest();
+    $assert->elementNotExists('css', $checkboxes);
+    $this->assertSame('', $assert->fieldExists(self::FIELD . '[display_id]')->getValue());
+    $this->submitForm([], 'Save');
+    $assert->statusMessageContains('has been updated.', 'status');
+    $saved = $this->container->get('entity_type.manager')->getStorage('node')->loadUnchanged((string) $article->id());
+    $this->assertInstanceOf(NodeInterface::class, $saved);
+    $this->assertTrue($saved->get('field_listing')->isEmpty());
   }
 
   /**
