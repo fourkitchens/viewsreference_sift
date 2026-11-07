@@ -47,7 +47,7 @@ jobs:
   test:
     name: test (${{ matrix.name }})
     runs-on: ubuntu-latest
-    continue-on-error: ${{ matrix.experimental == true }}
+    continue-on-error: ${{ matrix.allow_failure == true }}
     strategy:
       fail-fast: false
       matrix:
@@ -59,11 +59,17 @@ jobs:
           - name: latest-11
             drupal: '^11'
             php: '8.4'
+          - name: viewsreference-dev
+            drupal: '^11'
+            php: '8.4'
+            viewsreference: '2.x-dev'
+            allow_failure: true
           - name: drupal-12 (pending upstream)
             drupal: '^12.0@beta'
             php: '8.5'
             # Make this blocking and restore ^12 once it passes without the Views Reference patches.
             experimental: true
+            allow_failure: true
     steps:
       - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@v2

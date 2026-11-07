@@ -11,6 +11,8 @@ Views Reference Sift follows [Semantic Versioning][semver].
 - Adds Views UI warnings when an earlier contextual filter's missing-value
   action can block a Sift selection and notes when a selection depends on
   a default value.
+- Adds Views Reference integration contract tests and a non-blocking CI
+  check against Views Reference `2.x-dev`.
 
 ### Fixed
 

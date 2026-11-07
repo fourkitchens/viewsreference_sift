@@ -53,6 +53,30 @@ ddev restart
 ddev phpunit
 ```
 
+## Views Reference integration
+
+Sift relies on these Views Reference behaviors.
+
+- Both the regular and lazy formatters populate
+  `$view->element['#viewsreference']` with `data` decoded from serialized field
+  settings, including the `sift_terms` selection. `enabled_settings` lists
+  enabled setting plugins, including `sift_terms` when Sift is enabled on the
+  field.
+- The widget configures setting plugins with `view_name` and `display_id`,
+  flattens submitted `options`, and serializes setting values into the field
+  item's `data` property.
+- `viewsreference_views_pre_view()` replaces formatter metadata with URL
+  settings, decompresses the settings, and invokes only the setting plugins
+  listed in `enabled_settings`.
+
+[ViewsReferenceContractTest](tests/src/Kernel/ViewsReferenceContractTest.php)
+checks these contracts through the upstream code.
+[SiftTermsTest::testPreViewHookOrder()](tests/src/Kernel/SiftTermsTest.php)
+checks that Sift captures the saved selection before Views Reference and
+applies the validated selection afterward. The `viewsreference-dev` CI job
+runs the unit and kernel tests against Views Reference `2.x-dev` on the latest
+Drupal 11 with PHP 8.4. Its result is non-blocking.
+
 ## Open a pull request
 
 1. Branch from `1.0.x` and target `1.0.x` in the pull request.
