@@ -40,6 +40,10 @@ views.display_extender.viewsreference_sift:
                   - editor
                   - any
                   - all
+          allow_exclude:
+            type: boolean
+            label: 'Allow exclusion'
+            requiredKey: false
           widget:
             type: string
             label: 'Widget'

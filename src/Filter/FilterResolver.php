@@ -5,17 +5,23 @@ declare(strict_types=1);
 namespace Drupal\viewsreference_sift\Filter;
 
 use Drupal\Core\Config\Entity\ConfigEntityTypeInterface;
+use Drupal\Core\Entity\ContentEntityTypeInterface;
 use Drupal\Core\Entity\EntityFieldManagerInterface;
 use Drupal\Core\Entity\EntityTypeBundleInfoInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Entity\FieldableEntityInterface;
+use Drupal\Core\Entity\Sql\DefaultTableMapping;
+use Drupal\Core\Entity\Sql\SqlEntityStorageInterface;
 use Drupal\views\Plugin\views\argument\ArgumentPluginBase;
+use Drupal\views\Plugin\views\argument\EntityArgument;
 use Drupal\views\Plugin\views\argument\ManyToOne;
 use Drupal\views\Plugin\views\argument\StringArgument;
 use Drupal\views\Plugin\views\display\DisplayPluginBase;
+use Drupal\views\Plugin\views\query\Sql;
 use Drupal\views\ViewEntityInterface;
 use Drupal\views\ViewExecutable;
 use Drupal\views\ViewExecutableFactory;
+use Drupal\views\ViewsData;
 
 /**
  * Resolves which contextual arguments Sift can expose as entity selectors.
@@ -32,6 +38,7 @@ final class FilterResolver {
     private readonly EntityFieldManagerInterface $entityFieldManager,
     private readonly EntityTypeBundleInfoInterface $entityTypeBundleInfo,
     private readonly ViewExecutableFactory $executableFactory,
+    private readonly ViewsData $viewsData,
   ) {}
 
   /**
@@ -74,7 +81,7 @@ final class FilterResolver {
    * @phpstan-return array<string, SiftFilter>
    */
   public function supportedFilters(DisplayPluginBase $display): array {
-    return $this->resolve($display, []);
+    return $this->resolve($display, [], check_exclusion: TRUE);
   }
 
   /**
@@ -83,7 +90,7 @@ final class FilterResolver {
    * @phpstan-param array<string, array<string, mixed>> $settings
    * @phpstan-return array<string, SiftFilter>
    */
-  private function resolve(DisplayPluginBase $display, array $settings): array {
+  private function resolve(DisplayPluginBase $display, array $settings, bool $check_exclusion = FALSE): array {
     /** @var array<string, \Drupal\views\Plugin\views\ViewsHandlerInterface> $handlers */
     $handlers = $display->getHandlers('argument');
 
@@ -169,6 +176,8 @@ final class FilterResolver {
       $match = $configured['match'];
       $default_widget = $bundle_target ? 'checkboxes' : SiftFilter::DEFAULT_OPTIONS['widget'];
       $widget = $settings[$id]['widget'] ?? $default_widget;
+      $allow_exclude = ($configured['allow_exclude'] ?? FALSE) === TRUE;
+      $exclusion = $check_exclusion || $allow_exclude ? $this->exclusionTarget($display, $handler, $entity_type_id, $id_type) : NULL;
       $filters[$id] = new SiftFilter(
         id: $id,
         pluginId: $plugin_id,
@@ -189,9 +198,86 @@ final class FilterResolver {
         narrowsBundles: $bundles !== $validator_bundles,
         idType: $id_type,
         defaultIds: is_array($configured['default_ids']) ? array_values(array_filter($configured['default_ids'], 'is_string')) : [],
+        allowExclude: $exclusion !== NULL && $allow_exclude,
+        exclusionTarget: $exclusion,
       );
     }
     return $filters;
+  }
+
+  /**
+   * Resolves only storage whose rows can be matched to the base entity ID.
+   */
+  private function exclusionTarget(DisplayPluginBase $display, ArgumentPluginBase $handler, string $target_type, string $id_type): ?ExclusionTarget {
+    $plugin = $handler->getPluginId();
+    $direct = $handler instanceof EntityArgument || in_array($plugin, ['numeric', 'string'], TRUE);
+    if ((!$direct && !in_array($plugin, ['taxonomy_index_tid', 'entity_target_id'], TRUE))
+      || !in_array($handler->options['relationship'] ?? 'none', ['none', ''], TRUE)
+      || !empty($handler->options['not'])
+      || !$handler->isException($handler->options['exception']['value'] ?? 'all')) {
+      return NULL;
+    }
+
+    $view = $display->view;
+    $base_table = $view->storage->get('base_table');
+    $base_type = $view->getBaseEntityType();
+    if (!$base_type instanceof ContentEntityTypeInterface || !is_string($base_table) || $base_table === ''
+      || !in_array($base_table, [$base_type->getBaseTable(), $base_type->getDataTable()], TRUE)
+      || ($this->viewsData->get($base_table)['table']['base']['database'] ?? 'default') !== 'default'
+      || !$display->getPlugin('query') instanceof Sql) {
+      return NULL;
+    }
+    $id_key = $base_type->getKey('id');
+    $storage = $this->entityTypeManager->getStorage($base_type->id());
+    if ($id_key === FALSE || !$storage instanceof SqlEntityStorageInterface) {
+      return NULL;
+    }
+    $mapping = $storage->getTableMapping();
+    if (!$mapping instanceof DefaultTableMapping || !in_array($id_key, $mapping->getAllColumns($base_table), TRUE)) {
+      return NULL;
+    }
+    $base_column = "$base_table.$id_key";
+
+    if ($plugin === 'taxonomy_index_tid') {
+      return $base_type->id() === 'node' && $target_type === 'taxonomy_term'
+        && $handler->table === 'taxonomy_index' && $handler->realField === 'tid'
+        ? new ExclusionTarget($base_column, 'taxonomy_index', 'nid', 'tid')
+        : NULL;
+    }
+
+    if ($direct) {
+      $exact_id = $plugin === 'string'
+        ? $id_type === 'string' && empty($handler->options['glossary']) && empty($handler->options['transform_dash']) && ($handler->options['case'] ?? 'none') === 'none'
+        : $id_type === 'integer';
+      return $exact_id && $target_type === $base_type->id() && $handler->table === $base_table && $handler->realField === $id_key
+        ? new ExclusionTarget($base_column, $base_table, $id_key, $id_key)
+        : NULL;
+    }
+
+    $field_name = $handler->definition['field_name'] ?? $handler->definition['entity field'] ?? NULL;
+    $field = is_string($field_name) ? ($this->entityFieldManager->getFieldStorageDefinitions($base_type->id())[$field_name] ?? NULL) : NULL;
+    if ($field === NULL || $field->getType() !== 'entity_reference' || $field->getSetting('target_type') !== $target_type) {
+      return NULL;
+    }
+    $column = $mapping->getColumnNames($field->getName())['target_id'] ?? NULL;
+    if ($column === NULL || $column !== $handler->realField) {
+      return NULL;
+    }
+
+    if ($mapping->requiresDedicatedTableStorage($field)) {
+      $table = $mapping->getDedicatedDataTableName($field);
+      return $handler->table === $base_type->id() . '__' . $field->getName() && ($handler->definition['table'] ?? $handler->table) === $table
+        ? new ExclusionTarget($base_column, $table, 'entity_id', $column, TRUE)
+        : NULL;
+    }
+
+    $table = $handler->table;
+    return $mapping->allowsSharedTableStorage($field)
+      && in_array($table, [$base_type->getBaseTable(), $base_type->getDataTable()], TRUE)
+      && in_array($field->getName(), $mapping->getFieldNames($table), TRUE)
+      && in_array($id_key, $mapping->getAllColumns($table), TRUE)
+      ? new ExclusionTarget($base_column, $table, $id_key, $column)
+      : NULL;
   }
 
   /**

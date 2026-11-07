@@ -98,6 +98,7 @@ class SiftDisplaySettingsTest extends WebDriverTestBase {
     $dialog->fillField('filters[tid][description]', 'Choose topics to show.');
     $dialog->checkField('filters[tid][bundles][tags]');
     $dialog->selectFieldOption('filters[tid][match]', 'all');
+    $dialog->checkField('filters[tid][allow_exclude]');
     $dialog->selectFieldOption('filters[tid][widget]', 'checkboxes');
     $dialog->fillField('filters[tid][max]', '2');
     $dialog->checkField('filters[tid][required]');
@@ -114,6 +115,7 @@ class SiftDisplaySettingsTest extends WebDriverTestBase {
     $saved = $this->config($name)->get('display.embed_terms.display_options.display_extenders.viewsreference_sift.filters.tid');
     $this->assertIsArray($saved);
     $expected = [
+      'allow_exclude' => TRUE,
       'enabled' => FALSE,
       'label' => 'Topics',
       'description' => 'Choose topics to show.',

@@ -95,6 +95,7 @@ class SiftDisplaySettingsTest extends BrowserTestBase {
     // cspell:ignore nojs
     $this->drupalGet('admin/structure/views/nojs/display/sift_settings_test/embed_terms/viewsreference_sift');
     $this->assertSession()->fieldExists('Default selection');
+    $this->assertSession()->checkboxNotChecked('Allow exclusion');
     $bundles = [
       'filters[tid][bundles][123]' => TRUE,
       'filters[tid][bundles][audience]' => FALSE,

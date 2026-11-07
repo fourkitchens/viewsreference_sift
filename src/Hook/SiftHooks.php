@@ -15,8 +15,12 @@ use Drupal\Core\Routing\RouteMatchInterface;
 use Drupal\Core\StringTranslation\StringTranslationTrait;
 use Drupal\Core\StringTranslation\TranslatableMarkup;
 use Drupal\views\Plugin\views\argument\ArgumentPluginBase;
+use Drupal\views\Plugin\views\query\QueryPluginBase;
+use Drupal\views\Plugin\views\query\Sql;
 use Drupal\views\ViewExecutable;
 use Drupal\viewsreference_sift\Argument\ArgumentBuilder;
+use Drupal\viewsreference_sift\Filter\ExclusionTarget;
+use Drupal\viewsreference_sift\Selection\SelectionMode;
 use Drupal\viewsreference_sift\Selection\SelectionNormalizer;
 
 /**
@@ -29,12 +33,21 @@ final class SiftHooks {
   use StringTranslationTrait;
 
   /**
+   * Holds exclusions until this view's query is built.
+   *
+   * @var \WeakMap<\Drupal\views\ViewExecutable, array{display_id: string, filters: array<string, array{\Drupal\viewsreference_sift\Filter\ExclusionTarget, non-empty-list<int|string>}>}>
+   */
+  private readonly \WeakMap $exclusions;
+
+  /**
    * Injects the services that turn saved choices into contextual arguments.
    */
   public function __construct(
     private readonly SelectionNormalizer $selectionNormalizer,
     private readonly ArgumentBuilder $argumentBuilder,
-  ) {}
+  ) {
+    $this->exclusions = new \WeakMap();
+  }
 
   /**
    * Directs site builders to the field settings and Views display options.
@@ -151,12 +164,14 @@ final class SiftHooks {
    */
   #[Hook('views_pre_view', order: Order::Last)]
   public function applySelection(ViewExecutable $view, string $display_id, array &$args): void {
+    unset($this->exclusions[$view]);
     $pending = $view->element['#viewsreference_sift']['selection'] ?? NULL;
     unset($view->element['#viewsreference_sift']['selection']);
     if (!$pending || $pending['display_id'] !== $display_id) {
       return;
     }
 
+    /** @var array<string, \Drupal\viewsreference_sift\Filter\SiftFilter> $filters */
     $filters = $pending['filters'];
     $selection = $this->selectionNormalizer->fromStorage($pending['data'], $filters);
     if ($selection->isEmpty()) {
@@ -171,6 +186,40 @@ final class SiftHooks {
       return is_scalar($default) && $default !== FALSE ? (string) $default : NULL;
     };
     $args = $this->argumentBuilder->build($arguments, $filters, $selection, $args, $default_for);
+    // Views AJAX runs this hook again to render the already-built query.
+    if (!empty($view->built)) {
+      return;
+    }
+    $exclusions = [];
+    foreach ($selection->filters as $id => $selected) {
+      $filter = $filters[$id];
+      $target = $filter->exclusionTarget;
+      if ($selected->mode === SelectionMode::Exclude && $target instanceof ExclusionTarget && $selected->ids !== []
+        && ($args[$filter->position] ?? NULL) === $filter->exceptionValue) {
+        $exclusions[$id] = [$target, $selected->ids];
+      }
+    }
+    if ($exclusions !== []) {
+      $this->exclusions[$view] = ['display_id' => $display_id, 'filters' => $exclusions];
+    }
+  }
+
+  /**
+   * Applies exclusions once, after Views reaches their contextual arguments.
+   */
+  #[Hook('views_query_alter', order: Order::Last)]
+  public function excludeSelection(ViewExecutable $view, QueryPluginBase $query): void {
+    $pending = $this->exclusions[$view] ?? NULL;
+    unset($this->exclusions[$view]);
+    if (!$query instanceof Sql || $pending === NULL || $pending['display_id'] !== $view->current_display || $view->query !== $query) {
+      return;
+    }
+    foreach ($pending['filters'] as $id => [$target, $ids]) {
+      $argument = $view->argument[$id] ?? NULL;
+      if ($argument instanceof ArgumentPluginBase && $argument->isException()) {
+        $target->apply($query, $ids);
+      }
+    }
   }
 
 }

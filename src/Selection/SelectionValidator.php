@@ -28,7 +28,7 @@ final class SelectionValidator {
    * Tries display defaults only for filters without valid editor selections.
    * If neither survives, keeps capped integer IDs so Views can apply its
    * configured failure action, unless Sift narrows the allowed bundles.
-   * Strict validation requires all returned IDs to exist.
+   * Exclusions and strict validation require all returned IDs to exist.
    *
    * @phpstan-param array<string, \Drupal\viewsreference_sift\Filter\SiftFilter> $filters
    */
@@ -41,7 +41,7 @@ final class SelectionValidator {
       }
 
       $limit = $filters[$id]->multiple ? $filters[$id]->max : 1;
-      $capped[$id] = new FilterSelection(array_slice($selected->ids, 0, $limit), $selected->match);
+      $capped[$id] = new FilterSelection(array_slice($selected->ids, 0, $limit), $selected->match, $selected->mode);
       $by_type[$filters[$id]->entityTypeId][$id] = $capped[$id];
     }
 
@@ -56,7 +56,7 @@ final class SelectionValidator {
     if (!$strict) {
       foreach (array_diff_key($capped, $validated) as $id => $selected) {
         // Views can handle invalid IDs only for restrictions it knows about.
-        if (!$filters[$id]->narrowsBundles && $filters[$id]->idType === 'integer') {
+        if ($selected->mode === SelectionMode::Include && !$filters[$id]->narrowsBundles && $filters[$id]->idType === 'integer') {
           $validated[$id] = $selected;
         }
       }
@@ -115,7 +115,7 @@ final class SelectionValidator {
       ));
 
       if ($valid !== []) {
-        $validated[$id] = new FilterSelection($valid, $selected->match);
+        $validated[$id] = new FilterSelection($valid, $selected->match, $selected->mode);
       }
     }
     return $validated;

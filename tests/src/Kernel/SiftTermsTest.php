@@ -24,6 +24,7 @@ use Drupal\Tests\SchemaCheckTestTrait;
 use Drupal\user\Entity\Role;
 use Drupal\user\Entity\User;
 use Drupal\views\Entity\View;
+use Drupal\views\Plugin\views\query\Sql;
 use Drupal\views\ResultRow;
 use Drupal\views\ViewExecutable;
 use Drupal\views\Views;
@@ -147,6 +148,145 @@ class SiftTermsTest extends KernelTestBase {
       $this->termIds['B'] . '+' . $this->termIds['C'],
     ]);
     $this->assertResultTitles(['A', 'Both'], $this->executeWithSetting('embed_terms', $malformed, TRUE));
+  }
+
+  /**
+   * Tests taxonomy exclusion, cache tags, and cached result isolation.
+   */
+  public function testTaxonomyExclusion(): void {
+    $ids = [$this->termIds['A'], $this->termIds['B']];
+    $exclude = $this->storedSelection('tid', $ids, 'all');
+    $exclude['filters']['tid']['mode'] = 'exclude';
+    $this->assertResultTitles(['Both'], $this->executeWithSetting('embed_terms', $exclude));
+
+    $this->saveTermOptions(['allow_exclude' => TRUE, 'match' => 'all']);
+    $stored_view = View::load('viewsreference_sift_test');
+    $this->assertInstanceOf(View::class, $stored_view);
+    $display = &$stored_view->getDisplay('embed_terms');
+    $display['display_options']['defaults']['cache'] = FALSE;
+    $display['display_options']['cache'] = ['type' => 'tag'];
+    $stored_view->save();
+    $this->assertConfigSchemaByName('views.view.viewsreference_sift_test');
+
+    $view = $this->executeWithSetting('embed_terms', $exclude);
+    $this->assertResultTitles(['Neither'], $view);
+    foreach ($ids as $id) {
+      $this->assertContains('taxonomy_term:' . $id, $view->element['#cache']['tags']);
+    }
+    $this->assertResultTitles(['A', 'B', 'Both', 'Neither'], $this->executeWithSetting('embed_terms', '', args: ['all']));
+    $this->assertResultTitles(['Neither'], $this->executeWithSetting('embed_terms', $exclude));
+    $this->assertResultTitles(['Both'], $this->executeWithSetting('embed_terms', $this->storedSelection('tid', $ids)));
+
+    $exclude['filters']['tid']['ids'] = [$this->termIds['A']];
+    $this->assertResultTitles(['B', 'Neither'], $this->executeWithSetting('embed_terms', $exclude));
+  }
+
+  /**
+   * Tests that exclusion preserves an existing contextual OR group.
+   */
+  public function testTaxonomyExclusionWithOrGroup(): void {
+    $this->saveTermOptions(['allow_exclude' => TRUE]);
+    $exclude = $this->storedSelection('tid', [$this->termIds['A']]);
+    $exclude['filters']['tid']['mode'] = 'exclude';
+
+    $view = Views::getView('viewsreference_sift_test');
+    $this->assertInstanceOf(ViewExecutable::class, $view);
+    $this->assertTrue($view->setDisplay('embed_terms'));
+    $view->initQuery();
+    $query = $view->query;
+    $this->assertInstanceOf(Sql::class, $query);
+    $query->setWhereGroup('OR', '0');
+    $query->addWhere('0', 'node_field_data.nid', $this->nodeIds['A']);
+    $query->addWhereExpression('0', 'node_field_data.nid = :sift_test_nid', [':sift_test_nid' => $this->nodeIds['B']]);
+    $view->element['#viewsreference'] = [
+      'enabled_settings' => ['sift_terms'],
+      'data' => ['sift_terms' => $exclude],
+    ];
+    $view->preExecute();
+    try {
+      $this->assertTrue($view->execute());
+      $this->assertResultTitles(['B'], $view);
+    }
+    finally {
+      $view->postExecute();
+    }
+  }
+
+  /**
+   * Tests exclusion of matching rows on a reference field with multiple values.
+   */
+  public function testEntityReferenceExclusion(): void {
+    $storage = FieldStorageConfig::loadByName('node', 'field_program');
+    $this->assertInstanceOf(FieldStorageConfig::class, $storage);
+    $storage->setCardinality(FieldStorageDefinitionInterface::CARDINALITY_UNLIMITED)->save();
+    $programs = [];
+    foreach (['Alpha', 'Beta'] as $title) {
+      $node = Node::create(['type' => 'program', 'title' => $title, 'status' => TRUE]);
+      $node->save();
+      $programs[] = (int) $node->id();
+    }
+    foreach (['A' => [$programs[0]], 'B' => [$programs[1]], 'Both' => $programs] as $title => $ids) {
+      $node = Node::load($this->nodeIds[$title]);
+      $this->assertInstanceOf(NodeInterface::class, $node);
+      $node->set('field_program', array_map(static fn (int $id): array => ['target_id' => $id], $ids))->save();
+    }
+
+    $this->config('views.settings')->set('display_extenders', ['viewsreference_sift'])->save();
+    $stored_view = View::load('viewsreference_sift_test');
+    $this->assertInstanceOf(View::class, $stored_view);
+    $display = &$stored_view->getDisplay('embed_multi');
+    $id = 'field_program_target_id';
+    $display['display_options']['arguments'][$id]['break_phrase'] = TRUE;
+    $display['display_options']['arguments'][$id]['validate_options']['multiple'] = 1;
+    $display['display_options']['display_extenders']['viewsreference_sift']['filters'][$id] = ['allow_exclude' => TRUE] + SiftFilter::DEFAULT_OPTIONS;
+    $stored_view->save();
+
+    $exclude = $this->storedSelection($id, $programs);
+    $exclude['filters'][$id]['mode'] = 'exclude';
+    $this->assertResultTitles(['Neither'], $this->executeWithSetting('embed_multi', $exclude));
+    $exclude['filters'][$id]['ids'] = [$programs[0]];
+    $this->assertResultTitles(['B', 'Neither'], $this->executeWithSetting('embed_multi', $exclude));
+
+    // The earlier validation failure stops Views before the exclusion slot.
+    $display['display_options']['arguments']['tid_tags']['validate']['fail'] = 'ignore';
+    $stored_view->save();
+    $exclude['filters'] += $this->storedSelection('tid_tags', [$this->termIds['C']])['filters'];
+    $this->assertResultTitles(['A', 'B', 'Both', 'Neither'], $this->executeWithSetting('embed_multi', $exclude));
+  }
+
+  /**
+   * Tests that disabled, related, and depth filters cannot use exclusion.
+   */
+  public function testIneligibleExclusion(): void {
+    $this->saveTermOptions(['allow_exclude' => TRUE, 'enabled' => FALSE]);
+    $exclude = $this->storedSelection('tid', [$this->termIds['A']]);
+    $exclude['filters']['tid']['mode'] = 'exclude';
+    $this->assertResultTitles(['A', 'B', 'Both', 'Neither'], $this->executeWithSetting('embed_terms', $exclude));
+
+    $stored_view = View::load('viewsreference_sift_test');
+    $this->assertInstanceOf(View::class, $stored_view);
+    $display = &$stored_view->getDisplay('embed_depth');
+    $id = 'term_node_tid_depth';
+    $options = ['allow_exclude' => TRUE] + SiftFilter::DEFAULT_OPTIONS;
+    $display['display_options']['display_extenders']['viewsreference_sift']['filters'][$id] = $options;
+    $stored_view->save();
+    $exclude = $this->storedSelection($id, [$this->termIds['A']]);
+    $exclude['filters'][$id]['mode'] = 'exclude';
+    $this->assertResultTitles(['A', 'Both'], $this->executeWithSetting('embed_depth', $exclude));
+    $this->assertArrayNotHasKey('mode', $this->termsElement('embed_depth')['filters'][$id]);
+
+    $display = &$stored_view->getDisplay('embed_multi');
+    $display['display_options']['defaults']['relationships'] = FALSE;
+    $display['display_options']['relationships']['field_program'] = [
+      'id' => 'field_program',
+      'table' => 'node__field_program',
+      'field' => 'field_program',
+      'plugin_id' => 'standard',
+    ];
+    $display['display_options']['arguments']['tid_tags']['relationship'] = 'field_program';
+    $display['display_options']['display_extenders']['viewsreference_sift']['filters']['tid_tags'] = $options;
+    $stored_view->save();
+    $this->assertArrayNotHasKey('mode', $this->termsElement('embed_multi')['filters']['tid_tags']);
   }
 
   /**
@@ -1374,10 +1514,22 @@ class SiftTermsTest extends KernelTestBase {
 
   /**
    * Pins the public stored format through widget validation and serialization.
+   *
+   * @phpstan-param array{mode?: string} $submitted_mode
+   * @phpstan-param array{mode?: 'exclude'} $stored_mode
    */
-  #[DataProvider('storedMatchProvider')]
-  public function testWidgetValidation(string $match): void {
+  #[DataProvider('storedSelectionProvider')]
+  public function testWidgetValidation(string $match, array $submitted_mode = [], array $stored_mode = [], bool $allow_exclude = FALSE): void {
+    if ($allow_exclude) {
+      $this->saveTermOptions(['allow_exclude' => TRUE]);
+    }
     $field = $this->termsElement('embed_terms');
+    if ($allow_exclude) {
+      $this->assertSame(['include', 'exclude'], array_keys($field['filters']['tid']['mode']['#options']));
+    }
+    else {
+      $this->assertArrayNotHasKey('mode', $field['filters']['tid']);
+    }
     $field['#parents'] = ['field_listing', 0, 'options', 'sift_terms'];
     $form_state = new FormState();
     $form_state->setValue($field['#parents'], [
@@ -1390,7 +1542,7 @@ class SiftTermsTest extends KernelTestBase {
             ['target_id' => $this->termIds['B']],
           ],
           'match' => $match,
-        ],
+        ] + $submitted_mode,
       ],
     ]);
 
@@ -1402,8 +1554,8 @@ class SiftTermsTest extends KernelTestBase {
       'filters' => [
         'tid' => [
           'ids' => [$this->termIds['B'], $this->termIds['A']],
-          'match' => $match,
-        ],
+          'match' => $stored_mode === [] ? $match : 'any',
+        ] + $stored_mode,
       ],
     ];
     $validated = $form_state->getValue($field['#parents']);
@@ -1430,14 +1582,18 @@ class SiftTermsTest extends KernelTestBase {
   }
 
   /**
-   * Provides the public stored match values without using internal enums.
+   * Provides the public stored match and mode values.
    *
-   * @phpstan-return array<string, array{string}>
+   * @phpstan-return array<string, array{string, 1?: array{mode: string}, 2?: array{mode?: 'exclude'}, 3?: bool}>
    */
-  public static function storedMatchProvider(): array {
+  public static function storedSelectionProvider(): array {
     return [
       'any' => ['any'],
       'all' => ['all'],
+      'exclude' => ['all', ['mode' => 'exclude'], ['mode' => 'exclude'], TRUE],
+      'include' => ['all', ['mode' => 'include'], [], TRUE],
+      'unknown mode' => ['all', ['mode' => 'unknown'], [], TRUE],
+      'disallowed exclude' => ['all', ['mode' => 'exclude']],
     ];
   }
 
@@ -1726,8 +1882,9 @@ class SiftTermsTest extends KernelTestBase {
    * Executes an embed through the Views Reference pre-view hook.
    *
    * @phpstan-param array<string, mixed> $parent
+   * @phpstan-param list<string> $args
    */
-  protected function executeWithSetting(string $display, mixed $value, bool $ajax = FALSE, array $parent = [], bool $expected_success = TRUE): ViewExecutable {
+  protected function executeWithSetting(string $display, mixed $value, bool $ajax = FALSE, array $parent = [], bool $expected_success = TRUE, array $args = []): ViewExecutable {
     $view = Views::getView('viewsreference_sift_test');
     $this->assertInstanceOf(ViewExecutable::class, $view);
     $this->assertTrue($view->setDisplay($display));
@@ -1744,7 +1901,7 @@ class SiftTermsTest extends KernelTestBase {
       ];
     }
     try {
-      $view->preExecute();
+      $view->preExecute($args);
       $this->assertSame($expected_success, $view->execute());
       $view->postExecute();
     }

@@ -6,6 +6,7 @@ namespace Drupal\viewsreference_sift\Argument;
 
 use Drupal\viewsreference_sift\Selection\MatchMode;
 use Drupal\viewsreference_sift\Selection\Selection;
+use Drupal\viewsreference_sift\Selection\SelectionMode;
 
 /**
  * Keeps Sift selections aligned with the display's contextual arguments.
@@ -37,6 +38,12 @@ final class ArgumentBuilder {
     foreach ($filters as $id => $filter) {
       $selected = $selection->filters[$id] ?? NULL;
       if (!$selected || $selected->ids === []) {
+        continue;
+      }
+
+      if ($filter->allowExclude && $selected->mode === SelectionMode::Exclude) {
+        // The query hook applies exclusions instead of the argument handler.
+        $values[$filter->position] = $filter->exceptionValue;
         continue;
       }
 

@@ -25,6 +25,7 @@ use Drupal\viewsreference_sift\Filter\SiftFilter;
 use Drupal\viewsreference_sift\Selection\FilterSelection;
 use Drupal\viewsreference_sift\Selection\MatchMode;
 use Drupal\viewsreference_sift\Selection\Selection;
+use Drupal\viewsreference_sift\Selection\SelectionMode;
 use Drupal\viewsreference_sift\Selection\SelectionNormalizer;
 use Drupal\viewsreference_sift\Selection\SelectionValidator;
 use Drupal\viewsreference_sift\Selection\ValueSource;
@@ -200,6 +201,18 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
       }
       elseif ($filter->pluginId === 'taxonomy_index_tid_depth') {
         $group['#description'] = $this->t('Matches any selected term. A positive depth also includes child terms.');
+      }
+      if ($filter->allowExclude) {
+        $group['mode'] = [
+          '#type' => 'radios',
+          '#title' => $this->t('Selection mode'),
+          '#options' => [
+            SelectionMode::Include->value => $this->t('Show items that match'),
+            SelectionMode::Exclude->value => $this->t('Hide items that match'),
+          ],
+          '#description' => $this->t('Hiding items matches any selected item, regardless of the Match setting.'),
+          '#default_value' => ($selected->mode ?? SelectionMode::Include)->value,
+        ];
       }
       if ($filter->supportsAll && $filter->matchPolicy === 'editor') {
         $group['match'] = [
@@ -394,6 +407,7 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
       $values[$id] = [
         'ids' => [...$retained, ...$ids],
         'match' => $filter->supportsAll ? ($value['match'] ?? NULL) : NULL,
+        'mode' => $value['mode'] ?? NULL,
       ];
     }
 

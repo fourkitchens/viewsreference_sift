@@ -17,6 +17,7 @@ use Drupal\taxonomy\Entity\Vocabulary;
 use Drupal\views\Entity\View;
 use Drupal\views\ViewExecutable;
 use Drupal\views\Views;
+use Drupal\viewsreference_sift\Filter\SiftFilter;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 
@@ -100,6 +101,7 @@ class SiftAjaxPagerTest extends WebDriverTestBase {
       'type' => 'article',
       'title' => 'Listing',
       'status' => TRUE,
+      'field_tags' => ['target_id' => $forged_term->id()],
       'field_listing' => [
         'target_id' => 'sift_ajax_pager',
         'display_id' => 'embed',
@@ -124,6 +126,18 @@ class SiftAjaxPagerTest extends WebDriverTestBase {
     ], $view);
     $this->drupalGet($path, ['query' => ['viewsreference' => $forged]]);
     $this->assertRows(['Selected article 1', 'Selected article 2']);
+
+    $excluded = $this->selection((int) $forged_term->id());
+    $excluded['filters']['tid']['mode'] = 'exclude';
+    $listing->get('field_listing')->first()?->set('data', serialize(['sift_terms' => $excluded]));
+    $listing->save();
+
+    $this->drupalGet($path);
+    $this->assertRows(['Selected article 1', 'Selected article 2']);
+    $this->assertSession()->elementExists('css', '.js-pager__items a[rel="next"]')->click();
+    $this->assertSession()->assertWaitOnAjaxRequest();
+    $this->assertSession()->addressEquals($path);
+    $this->assertRows(['Selected article 3', 'Selected article 4']);
   }
 
   /**
@@ -182,7 +196,13 @@ class SiftAjaxPagerTest extends WebDriverTestBase {
           'display_title' => 'Embed',
           'display_plugin' => 'embed',
           'position' => 1,
-          'display_options' => [],
+          'display_options' => [
+            'display_extenders' => [
+              'viewsreference_sift' => [
+                'filters' => ['tid' => ['allow_exclude' => TRUE] + SiftFilter::DEFAULT_OPTIONS],
+              ],
+            ],
+          ],
         ],
       ],
     ])->save();

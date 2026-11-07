@@ -70,6 +70,10 @@ final readonly class SiftFilter {
    *   The entity ID type used in stored selections.
    * @param string[] $defaultIds
    *   The default entity IDs as stored in the display configuration.
+   * @param bool $allowExclude
+   *   Whether editors can exclude selected items on this display.
+   * @param \Drupal\viewsreference_sift\Filter\ExclusionTarget|null $exclusionTarget
+   *   The verified query target when this filter supports exclusion.
    *
    * @phpstan-param list<string> $bundles
    * @phpstan-param 'integer'|'string' $idType
@@ -95,6 +99,8 @@ final readonly class SiftFilter {
     public bool $narrowsBundles = FALSE,
     public string $idType = 'integer',
     public array $defaultIds = [],
+    public bool $allowExclude = FALSE,
+    public ?ExclusionTarget $exclusionTarget = NULL,
   ) {}
 
   /**
