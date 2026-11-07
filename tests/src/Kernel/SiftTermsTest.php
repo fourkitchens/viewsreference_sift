@@ -8,6 +8,7 @@ use Drupal\Core\Entity\Entity\EntityViewDisplay;
 use Drupal\Core\Field\FieldStorageDefinitionInterface;
 use Drupal\Core\Field\WidgetInterface;
 use Drupal\Core\Form\FormState;
+use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Routing\RouteObjectInterface;
 use Drupal\field\Entity\FieldConfig;
 use Drupal\field\Entity\FieldStorageConfig;
@@ -19,6 +20,7 @@ use Drupal\taxonomy\Entity\Term;
 use Drupal\taxonomy\Entity\Vocabulary;
 use Drupal\Tests\field\Traits\EntityReferenceFieldCreationTrait;
 use Drupal\Tests\SchemaCheckTestTrait;
+use Drupal\user\Entity\Role;
 use Drupal\user\Entity\User;
 use Drupal\views\Entity\View;
 use Drupal\views\ResultRow;
@@ -86,6 +88,8 @@ class SiftTermsTest extends KernelTestBase {
     $this->installEntitySchema('taxonomy_term');
     $this->installSchema('node', ['node_access']);
     $this->installConfig(['system', 'field', 'filter', 'node', 'taxonomy', 'views']);
+    $role = Role::load('anonymous') ?? Role::create(['id' => 'anonymous', 'label' => 'Anonymous']);
+    $role->grantPermission('access content')->grantPermission('access user profiles')->save();
 
     NodeType::create(['type' => 'article', 'name' => 'Article'])->save();
     NodeType::create(['type' => 'program', 'name' => 'Program'])->save();
@@ -287,7 +291,8 @@ class SiftTermsTest extends KernelTestBase {
     $this->saveTermOptions(['enabled' => FALSE]);
     $stored = $this->storedSelection('tid', [$this->termIds['A']]);
     $field = $this->termsElement('embed_terms', $stored);
-    $this->assertFalse($field['#access']);
+    $this->assertSame('value', $field['#type']);
+    $this->assertSame($stored, $field['#value']);
     $this->assertArrayNotHasKey('filters', $field);
 
     $view = $this->executeWithSetting('embed_terms', $stored);
@@ -621,7 +626,9 @@ class SiftTermsTest extends KernelTestBase {
 
     $legacy = ['terms' => [['target_id' => $this->termIds['C']], ['target_id' => $this->termIds['A']]]];
     $stale = $this->termsElement('embed_positions', $legacy);
-    $this->assertNull($stale['filters']['tid']['ids']['#default_value']);
+    $default = $stale['filters']['tid']['ids']['#default_value'];
+    $this->assertInstanceOf(Term::class, $default);
+    $this->assertSame($this->termIds['A'], (int) $default->id());
     $this->assertSame('Some saved selections no longer apply to this display and will be removed when you save.', (string) $stale['#description']);
 
     $field['#parents'] = ['field_listing', 0, 'options', 'sift_terms'];
@@ -641,13 +648,385 @@ class SiftTermsTest extends KernelTestBase {
   }
 
   /**
-   * Tests that hidden settings clear the old default value.
+   * Tests that saving a disabled filter preserves its saved selection.
    */
-  public function testHiddenWidgetClearsDefault(): void {
-    $stored = $this->storedSelection('tid', [$this->termIds['A']]);
-    $hidden = $this->termsElement('embed_plain', $stored);
-    $this->assertFalse($hidden['#access']);
-    $this->assertSame('', $hidden['#default_value'] ?? '');
+  public function testHiddenWidgetPreservesSavedSelection(): void {
+    $node = $this->createListing([$this->termIds['A']]);
+    $this->saveTermOptions(['enabled' => FALSE]);
+
+    $saved = $this->saveListingThroughWidget($node, [
+      'target_id' => 'viewsreference_sift_test',
+      'display_id' => 'embed_terms',
+      'options' => ['sift_terms' => $this->storedSelection('tid', [$this->termIds['B']])],
+    ]);
+
+    $data = $saved->get('field_listing')->first()?->get('data')->getValue();
+    $this->assertIsString($data);
+    $settings = unserialize($data, ['allowed_classes' => FALSE]);
+    $this->assertIsArray($settings);
+    $this->assertSame($this->storedSelection('tid', [$this->termIds['A']]), $settings['sift_terms'], 'Saving a disabled filter must preserve the saved selection and ignore submitted values.');
+  }
+
+  /**
+   * Tests that changing the selected view or display clears hidden settings.
+   */
+  #[DataProvider('hiddenWidgetRebuilds')]
+  public function testWidgetRebuildClearsSelection(bool $change_view): void {
+    $node = $this->createListing([$this->termIds['A']]);
+    $view_id = 'viewsreference_sift_test';
+    $display_id = 'embed_plain';
+    if ($change_view) {
+      $view = View::load($view_id);
+      $this->assertInstanceOf(View::class, $view);
+      $view = $view->createDuplicate();
+      $view_id = 'other_listing';
+      $display_id = 'embed_terms';
+      $displays = $view->get('display');
+      $displays['embed_terms']['display_options']['arguments'] = [];
+      $view->set('id', $view_id)
+        ->set('display', array_intersect_key($displays, array_flip(['default', 'embed_terms'])))
+        ->save();
+    }
+
+    $saved = $this->saveListingThroughWidget($node, [
+      'target_id' => $view_id,
+      'display_id' => $display_id,
+      'options' => ['sift_terms' => $this->storedSelection('tid', [$this->termIds['A']])],
+    ], TRUE);
+    $item = $saved->get('field_listing')->first();
+    $this->assertNotNull($item);
+    $this->assertSame($view_id, $item->get('target_id')->getValue());
+    $this->assertSame($display_id, $item->get('display_id')->getValue());
+    $data = $item->get('data')->getValue();
+    $this->assertIsString($data);
+    $settings = unserialize($data, ['allowed_classes' => FALSE]);
+    $this->assertIsArray($settings);
+    $this->assertSame('', $settings['sift_terms'], 'Rebuilding for a different view or display must clear the previous selection.');
+  }
+
+  /**
+   * Provides changes that rebuild the Views Reference widget.
+   *
+   * @phpstan-return array<string, array{bool}>
+   */
+  public static function hiddenWidgetRebuilds(): array {
+    return ['display' => [FALSE], 'view' => [TRUE]];
+  }
+
+  /**
+   * Processes input through Views Reference and saves the resulting field data.
+   *
+   * @phpstan-param array<string, mixed> $input
+   */
+  private function saveListingThroughWidget(NodeInterface $node, array $input, bool $rebuild = FALSE): NodeInterface {
+    $items = $node->get('field_listing');
+    $definition = $items->getFieldDefinition();
+    $this->assertInstanceOf(FieldConfig::class, $definition);
+    $definition->setSetting('plugin_types', ['embed' => 'embed']);
+    $widget = $this->container->get('plugin.manager.field.widget')->getInstance([
+      'field_definition' => $definition,
+      'form_mode' => 'default',
+      'configuration' => ['type' => 'viewsreference_select'],
+    ]);
+    $this->assertInstanceOf(WidgetInterface::class, $widget);
+    $form_state = new FormState();
+    if ($rebuild) {
+      $form_state->setUserInput(['field_listing' => [$input]]);
+      $trigger = $input['target_id'] === $items->first()?->get('target_id')->getValue() ? 'display_id' : 'target_id';
+      $form_state->setTriggeringElement(['#parents' => ['field_listing', 0, $trigger]]);
+    }
+    $form = ['#type' => 'form', '#parents' => [], '#tree' => TRUE, '#action' => '/'];
+    $form['field_listing'][0] = $widget->formElement($items, 0, ['#field_parents' => [], '#required' => FALSE], $form, $form_state);
+    $form_state->setUserInput(['form_id' => 'sift_listing_test', 'field_listing' => [$input]]);
+    $this->container->get('form_builder')->doBuildForm('sift_listing_test', $form, $form_state);
+    $values = $form_state->getValue('field_listing');
+    $this->assertIsArray($values);
+    $node->set('field_listing', $widget->massageFormValues($values, $form, $form_state))->save();
+    $saved = $this->container->get('entity_type.manager')->getStorage('node')->loadUnchanged($node->id());
+    $this->assertInstanceOf(NodeInterface::class, $saved);
+    return $saved;
+  }
+
+  /**
+   * Tests retaining inaccessible saved IDs with every widget type.
+   */
+  #[DataProvider('preservedWidgetTypes')]
+  public function testInaccessibleSelectionsSurvive(string $type, bool $multiple): void {
+    $node = $this->createListing([$this->termIds['B']]);
+    $this->configurePreservedWidget($type, $multiple);
+    $term = Term::load($this->termIds['B']);
+    $this->assertInstanceOf(Term::class, $term);
+    $term->setUnpublished()->save();
+    $forged = Term::create(['vid' => 'tags', 'name' => 'Unselected private term', 'status' => FALSE]);
+    $forged->save();
+    $this->useRestrictedEditor();
+
+    $input = ['filters' => ['tid' => ['retained' => [$forged->id()]]]];
+    if ($type !== 'radios') {
+      $input['filters']['tid']['ids'] = $type === 'autocomplete' ? '' : [];
+    }
+    [$form, $state, $widget] = $this->preservedSelectionForm($node, $input);
+    $field = $form['listing']['widget'][0]['options']['sift_terms'];
+    $this->assertArrayNotHasKey('#description', $field, 'Inaccessible selections must not be reported as stale.');
+    $this->assertSame([
+      '#type' => 'value',
+      '#value' => [$this->termIds['B']],
+    ], array_intersect_key($field['filters']['tid']['retained'], array_flip(['#type', '#value'])));
+    $this->assertStringContainsString("1 selected item isn't shown because you don't have access to it. It will be kept.", (string) $field['filters']['tid']['ids']['#description']);
+    $this->assertEmpty($state->getErrors(), 'An inaccessible saved selection must not block saving.');
+    $this->assertSame($this->storedSelection('tid', [$this->termIds['B']]), $this->savePreservedSelection($node, $widget, $form, $state));
+  }
+
+  /**
+   * Tests that deleted and out-of-bundle selections are removed on save.
+   */
+  public function testStaleSelectionsAreRemovedOnSave(): void {
+    $node = $this->createListing([$this->termIds['B'], $this->termIds['C']]);
+    $this->configurePreservedWidget('checkboxes', TRUE, FALSE);
+    $term = Term::load($this->termIds['B']);
+    $this->assertInstanceOf(Term::class, $term);
+    $term->delete();
+    $this->useRestrictedEditor();
+    [$form, $state, $widget] = $this->preservedSelectionForm($node, ['filters' => ['tid' => ['ids' => []]]]);
+    $field = $form['listing']['widget'][0]['options']['sift_terms'];
+    $this->assertSame('Some saved selections no longer apply to this display and will be removed when you save.', (string) $field['#description']);
+    $this->assertSame([], $field['filters']['tid']['retained']['#value']);
+    $this->assertEmpty($state->getErrors());
+    $this->assertSame(['version' => 2, 'filters' => []], $this->savePreservedSelection($node, $widget, $form, $state));
+  }
+
+  /**
+   * Tests that retained IDs count toward the selection maximum.
+   */
+  public function testRetainedSelectionsCountTowardMaximum(): void {
+    $node = $this->createListing([$this->termIds['B']]);
+    $this->configurePreservedWidget('checkboxes', TRUE);
+    $this->saveTermOptions(['widget' => 'checkboxes', 'label' => 'Topics', 'max' => 1]);
+    $term = Term::load($this->termIds['B']);
+    $this->assertInstanceOf(Term::class, $term);
+    $term->setUnpublished()->save();
+    $this->useRestrictedEditor();
+    [, $state] = $this->preservedSelectionForm($node, ['filters' => ['tid' => ['ids' => [$this->termIds['A'] => $this->termIds['A']]]]]);
+    $this->assertContains('Choose at most 1 item for Topics.', array_map('strval', $state->getErrors()));
+    $state->clearErrors();
+  }
+
+  /**
+   * Tests that a retained item deleted after form construction is removed.
+   */
+  public function testRetainedSelectionDeletedBeforeValidation(): void {
+    $this->configurePreservedWidget('checkboxes', TRUE, FALSE);
+    $term = Term::load($this->termIds['B']);
+    $this->assertInstanceOf(Term::class, $term);
+    $term->setUnpublished()->save();
+    $this->useRestrictedEditor();
+    $field = $this->termsElement('embed_terms', $this->storedSelection('tid', [$this->termIds['B']]));
+    $this->assertSame([$this->termIds['B']], $field['filters']['tid']['retained']['#value']);
+    $term->delete();
+    $field['#parents'] = ['field_listing', 0, 'options', 'sift_terms'];
+    $state = new FormState();
+    $callback = $field['#element_validate'][0];
+    $this->assertIsCallable($callback);
+    $callback($field, $state);
+    $this->assertSame(['version' => 2, 'filters' => []], $state->getValue($field['#parents']));
+  }
+
+  /**
+   * Tests that inaccessible IDs cannot be submitted as new visible choices.
+   */
+  #[DataProvider('preservedWidgetTypes')]
+  public function testForgedVisibleSelectionsAreRejected(string $type, bool $multiple): void {
+    $node = $this->createListing([]);
+    $this->configurePreservedWidget($type, $multiple, FALSE);
+    $forged = Term::create(['vid' => 'tags', 'name' => 'Forged choice', 'status' => FALSE]);
+    $forged->save();
+    $this->useRestrictedEditor();
+    $ids = match ($type) {
+      'autocomplete' => 'Forged choice (' . $forged->id() . ')',
+      'radios' => (string) $forged->id(),
+      default => [$forged->id() => $forged->id()],
+    };
+    [, $state] = $this->preservedSelectionForm($node, ['filters' => ['tid' => ['ids' => $ids]]]);
+    $this->assertNotEmpty($state->getErrors(), 'An inaccessible new choice must fail the normal widget validation.');
+    $state->clearErrors();
+  }
+
+  /**
+   * Tests that forged serialized defaults cannot introduce retained IDs.
+   */
+  public function testForgedSerializedDefaultsCannotAddSelections(): void {
+    $node = $this->createListing([$this->termIds['B']]);
+    $this->configurePreservedWidget('checkboxes', TRUE);
+    $term = Term::load($this->termIds['B']);
+    $this->assertInstanceOf(Term::class, $term);
+    $term->setUnpublished()->save();
+    $forged = Term::create(['vid' => 'tags', 'name' => 'Forged private term', 'status' => FALSE]);
+    $forged->save();
+    $this->useRestrictedEditor();
+    [$form, $state, $widget] = $this->preservedSelectionForm($node, ['filters' => ['tid' => ['ids' => []]]], serialize(['sift_terms' => $this->storedSelection('tid', [(int) $forged->id()])]));
+    $this->assertEmpty($state->getErrors());
+    $this->assertSame($this->storedSelection('tid', [$this->termIds['B']]), $this->savePreservedSelection($node, $widget, $form, $state));
+  }
+
+  /**
+   * Tests history isolation when a saved item moves into another item's delta.
+   */
+  public function testMovedWidgetPreservesIdenticalSavedData(): void {
+    $node = $this->createListing([$this->termIds['B']]);
+    $this->configurePreservedWidget('autocomplete', TRUE, FALSE);
+    $term = Term::load($this->termIds['B']);
+    $this->assertInstanceOf(Term::class, $term);
+    $term->setUnpublished()->save();
+    $this->useRestrictedEditor();
+    $input = ['filters' => ['tid' => ['ids' => '']]];
+    [, $state] = $this->preservedSelectionForm($node, $input);
+    $this->assertEmpty($state->getErrors());
+    $this->assertSame(
+      $this->storedSelection('tid', [$this->termIds['B']]),
+      $state->getValue(['field_listing', 0, 'options', 'sift_terms']),
+    );
+
+    $item = $node->get('field_listing')->first();
+    $this->assertNotNull($item);
+    $data = $item->get('data')->getValue();
+    $item->set('display_id', 'embed_positions');
+    $node->save();
+    $this->assertSame($data, $node->get('field_listing')->first()?->get('data')->getValue());
+
+    [$form, $state, $widget] = $this->preservedSelectionForm($node, $input, NULL, $state, 'embed_positions');
+    $this->assertEmpty($state->getErrors());
+    $this->assertSame($this->storedSelection('tid', [$this->termIds['B']]), $this->savePreservedSelection($node, $widget, $form, $state));
+  }
+
+  /**
+   * Tests rebuild preservation and clearing after a display switch and return.
+   */
+  public function testPreservedSelectionRebuildHistory(): void {
+    $node = $this->createListing([$this->termIds['B']]);
+    $this->configurePreservedWidget('checkboxes', TRUE, FALSE);
+    $term = Term::load($this->termIds['B']);
+    $this->assertInstanceOf(Term::class, $term);
+    $term->setUnpublished()->save();
+    $this->useRestrictedEditor();
+    $input = ['filters' => ['tid' => ['ids' => []]]];
+    [, $state] = $this->preservedSelectionForm($node, $input);
+    foreach ([
+      ['embed_terms', $this->storedSelection('tid', [$this->termIds['B']])],
+      ['embed_plain', ''],
+      ['embed_terms', ['version' => 2, 'filters' => []]],
+    ] as [$display, $expected]) {
+      [, $state] = $this->preservedSelectionForm($node, $input, NULL, $state, $display);
+      $this->assertEmpty($state->getErrors());
+      $this->assertSame($expected, $state->getValue(['field_listing', 0, 'options', 'sift_terms']));
+    }
+  }
+
+  /**
+   * Provides the visible widget types and cardinalities.
+   *
+   * @phpstan-return array<string, array{string, bool}>
+   */
+  public static function preservedWidgetTypes(): array {
+    return [
+      'autocomplete' => ['autocomplete', TRUE],
+      'checkboxes' => ['checkboxes', TRUE],
+      'select' => ['select', TRUE],
+      'radios' => ['radios', FALSE],
+    ];
+  }
+
+  /**
+   * Configures the filter used by the preservation tests.
+   */
+  private function configurePreservedWidget(string $type, bool $multiple, bool $required = TRUE): void {
+    $view = View::load('viewsreference_sift_test');
+    $this->assertInstanceOf(View::class, $view);
+    $displays = $view->get('display');
+    $displays['embed_terms']['display_options']['arguments']['tid']['break_phrase'] = $multiple;
+    $view->set('display', $displays)->save();
+    $this->saveTermOptions([
+      'widget' => $type === 'radios' ? 'checkboxes' : $type,
+      'label' => 'Topics',
+      'required' => $required,
+    ]);
+  }
+
+  /**
+   * Switches to an editor who can reference published content.
+   */
+  private function useRestrictedEditor(): void {
+    User::create(['uid' => 1, 'name' => 'Administrator', 'status' => TRUE])->save();
+    Role::create([
+      'id' => 'sift_editor',
+      'label' => 'Sift editor',
+      'permissions' => ['access content', 'edit any article content'],
+    ])->save();
+    $editor = User::create(['name' => 'Limited editor', 'status' => TRUE, 'roles' => ['sift_editor']]);
+    $editor->save();
+    $this->container->get('current_user')->setAccount($editor);
+  }
+
+  /**
+   * Builds and validates the real field widget, including server-only values.
+   *
+   * @phpstan-param array<string, mixed> $selection
+   * @phpstan-return array{array<array-key, mixed>, FormStateInterface, WidgetInterface}
+   */
+  private function preservedSelectionForm(NodeInterface $node, array $selection, ?string $forged_data = NULL, ?FormStateInterface $state = NULL, string $display = 'embed_terms'): array {
+    $items = $node->get('field_listing');
+    $definition = $items->getFieldDefinition();
+    $this->assertInstanceOf(FieldConfig::class, $definition);
+    $definition->setSetting('plugin_types', ['embed' => 'embed']);
+    $widget = $this->container->get('plugin.manager.field.widget')->getInstance([
+      'field_definition' => $definition,
+      'form_mode' => 'default',
+      'configuration' => ['type' => 'viewsreference_select'],
+    ]);
+    $this->assertInstanceOf(WidgetInterface::class, $widget);
+    $rebuild = $state !== NULL || $forged_data !== NULL;
+    $state ??= new FormState();
+    $state->setValues([])->setValidationComplete(FALSE);
+    $input = [
+      'form_id' => 'sift_preservation_test',
+      'field_listing' => [
+        [
+          'target_id' => 'viewsreference_sift_test',
+          'display_id' => $display,
+          'options' => ['sift_terms' => $selection],
+        ],
+      ],
+    ];
+    if ($forged_data !== NULL) {
+      $input['field_listing'][0]['data'] = $forged_data;
+    }
+    if ($rebuild) {
+      $state->setUserInput($input);
+    }
+    $form = ['#type' => 'form', '#parents' => [], '#tree' => TRUE, '#action' => '/', '#validate' => []];
+    $form['listing'] = $widget->form($items, $form, $state, 0);
+    $state->setUserInput($input)->setSubmitted();
+    $this->container->get('form_builder')->doBuildForm('sift_preservation_test', $form, $state);
+    $this->container->get('form_validator')->validateForm('sift_preservation_test', $form, $state);
+    return [$form, $state, $widget];
+  }
+
+  /**
+   * Serializes validated widget values and reloads the saved selection.
+   *
+   * @phpstan-param array<array-key, mixed> $form
+   * @phpstan-return array<string, mixed>
+   */
+  private function savePreservedSelection(NodeInterface $node, WidgetInterface $widget, array $form, FormStateInterface $state): array {
+    $values = $state->getValue('field_listing');
+    $this->assertIsArray($values);
+    $node->set('field_listing', $widget->massageFormValues($values, $form, $state))->save();
+    $saved = $this->container->get('entity_type.manager')->getStorage('node')->loadUnchanged($node->id());
+    $this->assertInstanceOf(NodeInterface::class, $saved);
+    $data = $saved->get('field_listing')->first()?->get('data')->getValue();
+    $this->assertIsString($data);
+    $settings = unserialize($data, ['allowed_classes' => FALSE]);
+    $this->assertIsArray($settings);
+    return $settings['sift_terms'];
   }
 
   /**
@@ -668,8 +1047,8 @@ class SiftTermsTest extends KernelTestBase {
    * Tests field visibility, vocabulary restrictions and saved defaults.
    */
   public function testTermsWidget(): void {
-    $this->assertFalse($this->termsElement('embed_plain')['#access']);
-    $this->assertFalse($this->termsElement('embed_terms', '', 'missing')['#access']);
+    $this->assertSame('value', $this->termsElement('embed_plain')['#type']);
+    $this->assertSame('value', $this->termsElement('embed_terms', '', 'missing')['#type']);
 
     $field = $this->termsElement('embed_terms');
     $this->assertSame('fieldset', $field['#type']);

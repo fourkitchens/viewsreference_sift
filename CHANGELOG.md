@@ -16,6 +16,8 @@ Views Reference Sift follows [Semantic Versioning][semver].
 
 ### Fixed
 
+- Preserves saved selections when Sift is disabled on a display and keeps
+  valid selected items the editor cannot reference, with an explanatory note.
 - Preserves a contextual filter's configured action when its value is
   missing and a later filter has a Sift selection.
 - Uses singular wording in the validation error when a Sift filter allows
