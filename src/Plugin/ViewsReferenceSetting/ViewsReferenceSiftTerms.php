@@ -148,8 +148,8 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
       ]);
       $referenceable = $handler instanceof SelectionInterface ? $handler->validateReferenceableEntities(array_keys($entities)) : [];
       $visible = array_filter(array_intersect_key($entities, array_fill_keys($referenceable, TRUE)), static fn (EntityInterface $entity): bool => $entity->access('view'));
-      $retained = array_map('intval', array_keys(array_diff_key($entities, $visible)));
-      $widget = $this->buildWidget($filter, $visible, array_map('intval', array_keys($visible)), $handler, $retained);
+      $retained = self::entityIds($filter, array_diff_key($entities, $visible));
+      $widget = $this->buildWidget($filter, $visible, $handler, $retained);
       $help = [];
       if ($filter->required) {
         $help[] = $this->t('A selection is required.');
@@ -213,11 +213,10 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
    * Builds the configured widget, using autocomplete for large option sets.
    *
    * @phpstan-param array<int|string, EntityInterface> $entities
-   * @phpstan-param list<int> $ids
-   * @phpstan-param list<int> $retained
+   * @phpstan-param list<int|string> $retained
    * @phpstan-return array<string, mixed>
    */
-  private function buildWidget(SiftFilter $filter, array $entities, array $ids, mixed $handler, array &$retained): array {
+  private function buildWidget(SiftFilter $filter, array $entities, mixed $handler, array &$retained): array {
     $title = $filter->multiple
       ? $this->t('Select items for @label', ['@label' => $filter->label])
       : $this->t('Select an item for @label', ['@label' => $filter->label]);
@@ -226,7 +225,7 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
       '#target_type' => $filter->entityTypeId,
       '#tags' => $filter->multiple,
       '#title' => $title,
-      '#default_value' => $filter->multiple ? array_values($entities) : ($entities[$ids[0] ?? 0] ?? NULL),
+      '#default_value' => $filter->multiple ? array_values($entities) : (reset($entities) ?: NULL),
     ];
     if ($filter->bundles) {
       $autocomplete['#selection_settings']['target_bundles'] = $filter->bundles;
@@ -247,10 +246,13 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
       // Core adds term hierarchy only when the lookup has no limit.
       $options = array_intersect_key(OptGroup::flattenOptions($handler->getReferenceableEntities()), $options);
     }
+    if ($filter->idType === 'string') {
+      $options = array_filter($options, static fn (int|string $id): bool => SiftFilter::isValidStringId((string) $id), ARRAY_FILTER_USE_KEY);
+    }
     $option_entities = $this->entityTypeManager->getStorage($filter->entityTypeId)->loadMultiple(array_keys($options));
     $option_entities = array_filter($option_entities, static fn (EntityInterface $entity): bool => $entity->access('view'));
     $options = array_intersect_key($options, $option_entities);
-    $retained = [...$retained, ...array_map('intval', array_keys(array_diff_key($entities, $options)))];
+    $retained = [...$retained, ...self::entityIds($filter, array_diff_key($entities, $options))];
     $options = array_diff_key($options, array_fill_keys($retained, TRUE));
 
     $defaults = array_values(array_intersect_key($entities, $options));
@@ -282,6 +284,16 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
   }
 
   /**
+   * Restores the ID type after PHP casts numeric string array keys.
+   *
+   * @phpstan-param array<int|string, EntityInterface> $entities
+   * @phpstan-return list<int|string>
+   */
+  private static function entityIds(SiftFilter $filter, array $entities): array {
+    return array_map($filter->idType === 'string' ? 'strval' : 'intval', array_keys($entities));
+  }
+
+  /**
    * Prepares a selection for the late Views hook to apply.
    *
    * Resolves and validates the selection before adding entity cache tags and
@@ -305,8 +317,10 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
     $selection = $this->selectionNormalizer->fromStorage($value, $filters);
     $selection = $this->selectionValidator->validate($selection, $filters);
     foreach ($selection->filters as $id => $selected) {
-      $tags = Cache::buildTags($filters[$id]->entityTypeId, $selected->ids);
-      $view->element['#cache']['tags'] = Cache::mergeTags($view->element['#cache']['tags'] ?? [], $tags);
+      $storage = $this->entityTypeManager->getStorage($filters[$id]->entityTypeId);
+      foreach ($storage->loadMultiple($selected->ids) as $entity) {
+        $view->element['#cache']['tags'] = Cache::mergeTags($view->element['#cache']['tags'] ?? [], $entity->getCacheTags());
+      }
     }
     if (!$selection->isEmpty()) {
       $view->element['#viewsreference_sift']['selection'] = [
@@ -333,16 +347,18 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
     foreach ($filters as $id => $filter) {
       $value = is_array($submitted) && is_array($submitted[$id] ?? NULL) ? $submitted[$id] : [];
       $ids = $value['ids'] ?? [];
-      $ids = is_array($ids) ? $ids : [$ids];
+      $ids = array_map(static fn (mixed $item): mixed => is_array($item) ? ($item['target_id'] ?? NULL) : $item, is_array($ids) ? $ids : [$ids]);
+      if ($filter->idType === 'string') {
+        // Form API may use integer option keys for numeric string IDs.
+        $checkboxes = ($element['filters'][$id]['ids']['#type'] ?? NULL) === 'checkboxes';
+        $ids = array_map(static fn (mixed $id): mixed => is_int($id) ? ($checkboxes && $id === 0 ? NULL : (string) $id) : $id, $ids);
+      }
       $retained = $element['filters'][$id]['retained']['#value'] ?? [];
       $entities = $retained ? \Drupal::entityTypeManager()->getStorage($filter->entityTypeId)->loadMultiple($retained) : [];
       $entities = array_filter($entities, static fn (EntityInterface $entity): bool => $filter->bundles === [] || in_array($entity->bundle(), $filter->bundles, TRUE));
-      $retained = array_map('intval', array_keys($entities));
+      $retained = self::entityIds($filter, $entities);
       $values[$id] = [
-        'ids' => [
-          ...$retained,
-          ...array_map(static fn (mixed $item): mixed => is_array($item) ? ($item['target_id'] ?? NULL) : $item, $ids),
-        ],
+        'ids' => [...$retained, ...$ids],
         'match' => $filter->supportsAll ? ($value['match'] ?? NULL) : NULL,
       ];
     }

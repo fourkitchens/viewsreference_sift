@@ -65,8 +65,11 @@ final readonly class SiftFilter {
    *   Whether the editor must select a value.
    * @param bool $narrowsBundles
    *   Whether the display settings further restrict the Views bundles.
+   * @param string $idType
+   *   The entity ID type used in stored selections.
    *
    * @phpstan-param list<string> $bundles
+   * @phpstan-param 'integer'|'string' $idType
    */
   public function __construct(
     public string $id,
@@ -86,7 +89,15 @@ final readonly class SiftFilter {
     public int $max = self::DEFAULT_MAX,
     public bool $required = FALSE,
     public bool $narrowsBundles = FALSE,
+    public string $idType = 'integer',
   ) {}
+
+  /**
+   * Checks whether an ID can be passed to Views without escaping delimiters.
+   */
+  public static function isValidStringId(string $id): bool {
+    return preg_match('/^[A-Za-z0-9_.-]+$/D', $id) === 1;
+  }
 
   /**
    * Applies the display's match policy to a selection.
@@ -95,6 +106,9 @@ final readonly class SiftFilter {
    * without All support falls back to Any when the policy requires All.
    */
   public function resolveMatch(MatchMode $editor_choice): MatchMode {
+    if ($this->idType === 'string' && !$this->supportsAll) {
+      return MatchMode::Any;
+    }
     return match ($this->matchPolicy) {
       'any' => MatchMode::Any,
       'all' => $this->supportsAll ? MatchMode::All : MatchMode::Any,

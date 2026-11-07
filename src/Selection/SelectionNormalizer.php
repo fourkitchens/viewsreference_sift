@@ -4,19 +4,21 @@ declare(strict_types=1);
 
 namespace Drupal\viewsreference_sift\Selection;
 
+use Drupal\viewsreference_sift\Filter\SiftFilter;
+
 /**
  * Adapts current and legacy field settings to the selection objects Sift uses.
  *
  * @internal
  *
- * @phpstan-type StoredFilter array{ids: list<int>, match: value-of<MatchMode>}
+ * @phpstan-type StoredFilter array{ids: list<int|string>, match: value-of<MatchMode>}
  */
 final class SelectionNormalizer {
 
   /**
    * Reads versioned selections and the original single-filter setting.
    *
-   * Maps the original setting to the first configured filter and normalizes
+   * Maps the original setting to the first integer filter and normalizes
    * values against the enabled filters and their current match policies.
    *
    * @phpstan-param array<string, \Drupal\viewsreference_sift\Filter\SiftFilter> $filters
@@ -33,7 +35,7 @@ final class SelectionNormalizer {
       $stored_filters = $value['filters'];
     }
     else {
-      $first_filter = array_key_first($filters);
+      $first_filter = array_key_first(array_filter($filters, static fn (SiftFilter $filter): bool => $filter->idType === 'integer'));
       if ($first_filter === NULL || !is_array($value['terms'] ?? NULL)) {
         return new Selection([]);
       }
@@ -52,7 +54,7 @@ final class SelectionNormalizer {
         continue;
       }
 
-      $ids = $this->normalizeIds($stored['ids']);
+      $ids = $this->normalizeIds($stored['ids'], $filter);
       if ($ids === []) {
         continue;
       }
@@ -89,14 +91,20 @@ final class SelectionNormalizer {
   }
 
   /**
-   * Keeps unique positive entity IDs in the order they were supplied.
+   * Keeps unique valid IDs of the filter's type in their supplied order.
    *
    * @phpstan-param array<array-key, mixed> $values
-   * @phpstan-return list<int>
+   * @phpstan-return list<int|string>
    */
-  private function normalizeIds(array $values): array {
+  private function normalizeIds(array $values, SiftFilter $filter): array {
     $ids = [];
     foreach ($values as $value) {
+      if ($filter->idType === 'string') {
+        if (is_string($value) && SiftFilter::isValidStringId($value)) {
+          $ids[$value] = $value;
+        }
+        continue;
+      }
       if (!is_int($value) && !is_string($value)) {
         continue;
       }

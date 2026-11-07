@@ -88,21 +88,27 @@ the Sift selection wins.
 
 1. Edit a View display under **Structure → Views**. Add a contextual filter
    that accepts entity IDs. Supported options include **Has taxonomy term
-   ID** with or without depth, an entity reference field's target ID, and
-   numeric ID filters with an entity validator.
-1. Use entity types with integer IDs. Enable **Specify validation criteria**
-   and choose an entity validator to restrict the allowed bundles.
+   ID** with or without depth, entity reference target IDs including
+   references to configuration entities, bundle IDs such as content types
+   and taxonomy vocabularies, and numeric ID filters with an entity validator.
+   Other string filters using `StringArgument` need an entity validator
+   for an entity type with string IDs.
+1. Enable **Specify validation criteria** and choose an entity validator to
+   restrict the allowed bundles where applicable.
 1. Set **Administrative title** to label the widget. Without it, Sift uses
    the name of the single allowed bundle or the entity type's plural label.
 1. Turn on **Allow multiple values** if editors should select several
-   items. **All** is available for filters that support it. Numeric and
-   taxonomy depth filters use **Any**.
+   items. **All** is available for multiple-value filters that use Views'
+   many-to-one matching. Other filters use **Any**.
 1. Under **When the filter value is not available**, choose how Views handles
    an empty contextual filter. If a later filter has a Sift selection, Sift
    passes the exception value for **Display all results for the specified
    field**. For **Provide default value**, Sift uses the default when one is
    available. Otherwise, Views stops at the empty filter and handles it as
    it would without Sift.
+
+For a string ID filter, choose an exception value that differs from every
+selectable ID. Views skips the filter when its argument matches the exception.
 
 Sift shows one widget per supported and enabled filter, in display order.
 Selections on different filters apply together. For taxonomy filters in
@@ -124,11 +130,12 @@ each filter, apply the changes, and save the View.
   more bundles. The default uses all bundles the validator allows.
 - **Match** lets the editor choose Any or All by default. You can also
   require Any or All on filters that support both modes.
-- **Widget** uses autocomplete by default. **Checkboxes** shows checkboxes
-  for filters that accept multiple items and radio buttons for single-value
-  filters. Optional radio groups include **None**. You can also choose a
-  select list. These options switch to autocomplete above 100 referenceable
-  items.
+- **Widget** defaults to **Checkboxes** for bundle filters and
+  **Autocomplete** for other filters. **Checkboxes** shows checkboxes for
+  multiple-value filters and radio buttons for single-value filters. Optional
+  radio groups include **None**. You can also choose **Select list**.
+  **Checkboxes** and **Select list** switch to autocomplete above 100
+  referenceable items.
 - **Maximum selections** defaults to 10. Set it from 1 to 50 for a filter
   that accepts multiple items. The widget shows this limit even when the
   default is used. A single-value filter accepts one item.
@@ -205,9 +212,11 @@ These contracts are stable across the 1.x series.
   [Configuration schema](config/schema/viewsreference_sift.schema.yml)
 
 A saved selection uses version `2`, with `filters` keyed by contextual filter
-ID. Each filter has a list of positive integer `ids` and a `match` value of
-`any` or `all`. Views Reference serializes the containing `data` array on the
-field item. This example shows the decoded data.
+ID. Each filter has a list of `ids` and a `match` value of `any` or `all`.
+Integer IDs are stored as positive integers. String IDs are nonempty strings
+of ASCII letters, digits, underscores, dots, and hyphens. Numeric-looking
+string IDs such as `'42'` stay strings. Views Reference serializes the
+containing `data` array on the field item. This example shows the decoded data.
 
 ```yaml
 data:
@@ -216,6 +225,9 @@ data:
     filters:
       tid:
         ids: [12, 34]
+        match: any
+      type:
+        ids: ['article', 'page']
         match: any
 ```
 
