@@ -27,8 +27,9 @@ source to include its test bootstrap. Use `RUNNER_TEMP` in place of
 `${{ runner.temp }}` for the test paths and SQLite database.
 [CI workflow](.github/workflows/ci.yml)
 
-The job applies patches for Views Reference setting discovery and a PHP 8.5
-formatter warning. Drupal 12 support depends on the upstream discovery fix.
+The job applies patches for Views Reference setting discovery, the Drupal 12
+widget return type, and a PHP 8.5 formatter warning. Drupal 12 support depends
+on these upstream fixes.
 [Views Reference issue #3583101](https://www.drupal.org/project/viewsreference/issues/3583101)
 
 ## Run checks
@@ -52,6 +53,30 @@ ddev add-on get ddev/ddev-selenium-standalone-chrome
 ddev restart
 ddev phpunit
 ```
+
+## Views Reference integration
+
+Sift relies on these Views Reference behaviors.
+
+- Both the regular and lazy formatters populate
+  `$view->element['#viewsreference']` with `data` decoded from serialized field
+  settings, including the `sift_terms` selection. `enabled_settings` lists
+  enabled setting plugins, including `sift_terms` when Sift is enabled on the
+  field.
+- The widget configures setting plugins with `view_name` and `display_id`,
+  flattens submitted `options`, and serializes setting values into the field
+  item's `data` property.
+- `viewsreference_views_pre_view()` replaces formatter metadata with URL
+  settings, decompresses the settings, and invokes only the setting plugins
+  listed in `enabled_settings`.
+
+[ViewsReferenceContractTest](tests/src/Kernel/ViewsReferenceContractTest.php)
+checks these contracts through the upstream code.
+[SiftTermsTest::testPreViewHookOrder()](tests/src/Kernel/SiftTermsTest.php)
+checks that Sift captures the saved selection before Views Reference and
+applies the validated selection afterward. The `viewsreference-dev` CI job
+runs the unit and kernel tests against Views Reference `2.x-dev` on the latest
+Drupal 11 with PHP 8.4. Its result is non-blocking.
 
 ## Open a pull request
 

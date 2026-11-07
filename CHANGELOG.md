@@ -11,6 +11,8 @@ Views Reference Sift follows [Semantic Versioning][semver].
 - Adds Views UI warnings when an earlier contextual filter's missing-value
   action can block a Sift selection and notes when a selection depends on
   a default value.
+- Adds Views Reference integration contract tests and a non-blocking CI
+  check against Views Reference `2.x-dev`.
 
 ### Fixed
 
@@ -20,6 +22,8 @@ Views Reference Sift follows [Semantic Versioning][semver].
   at most one item.
 - Skips automatic extender enablement during configuration imports and
   leaves individual View settings to the import on uninstall.
+- Keeps experimental Drupal 12 widget tests running with a test-only
+  Views Reference return type patch.
 
 ### Changed
 

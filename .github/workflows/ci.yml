@@ -47,7 +47,7 @@ jobs:
   test:
     name: test (${{ matrix.name }})
     runs-on: ubuntu-latest
-    continue-on-error: ${{ matrix.experimental == true }}
+    continue-on-error: ${{ matrix.allow_failure == true }}
     strategy:
       fail-fast: false
       matrix:
@@ -59,11 +59,17 @@ jobs:
           - name: latest-11
             drupal: '^11'
             php: '8.4'
+          - name: viewsreference-dev
+            drupal: '^11'
+            php: '8.4'
+            viewsreference: '2.x-dev'
+            allow_failure: true
           - name: drupal-12 (pending upstream)
             drupal: '^12.0@beta'
             php: '8.5'
             # Make this blocking and restore ^12 once it passes without the Views Reference patches.
             experimental: true
+            allow_failure: true
     steps:
       - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@v2
@@ -110,13 +116,15 @@ jobs:
         # cspell:ignore cweagans repatch
         run: |
           cp "$GITHUB_WORKSPACE/tests/patches/viewsreference-attribute.patch" \
-            "$GITHUB_WORKSPACE/tests/patches/viewsreference-cacheability.patch" .
+            "$GITHUB_WORKSPACE/tests/patches/viewsreference-cacheability.patch" \
+            "$GITHUB_WORKSPACE/tests/patches/viewsreference-widget-return.patch" .
           cat > patches.json <<'EOF'
           {
             "patches": {
               "drupal/viewsreference": {
                 "Support setting attribute discovery": "viewsreference-attribute.patch",
-                "Use the merged cache metadata on PHP 8.5": "viewsreference-cacheability.patch"
+                "Use the merged cache metadata on PHP 8.5": "viewsreference-cacheability.patch",
+                "Match the Drupal 12 widget return type": "viewsreference-widget-return.patch"
               }
             }
           }
