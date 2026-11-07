@@ -101,8 +101,8 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
   /**
    * Builds a selection widget for each enabled filter on the chosen display.
    *
-   * Hides the setting if the display has no enabled filters. Saved IDs supply
-   * widget defaults when the selected entities still fit the display.
+   * Preserves saved settings when the display has no enabled filters. Saved
+   * entities the editor cannot reference are kept outside the visible widget.
    *
    * @param array $form_field
    *   The Views Reference setting element to replace with filter widgets.
@@ -114,13 +114,14 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
     $view_id = EntityAutocomplete::extractEntityIdFromAutocompleteInput($view_name) ?? $view_name;
     $configured = $this->filterResolver->forDisplay($view_id, $this->configuration['display_id'] ?? '', TRUE);
     $filters = array_filter($configured, static fn (SiftFilter $filter): bool => $filter->enabled);
+    $stored = $form_field['#default_value'] ?? '';
     if (!$filters) {
+      $form_field['#type'] = 'value';
+      $form_field['#value'] = $stored;
       unset($form_field['#default_value']);
-      $form_field['#access'] = FALSE;
       return;
     }
 
-    $stored = $form_field['#default_value'] ?? '';
     $selection = $this->selectionNormalizer->fromStorage($stored, $configured);
     $form_field['#type'] = 'fieldset';
     $form_field['#title'] = $this->t('Filter this list');
@@ -141,20 +142,30 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
       }
       $has_stale_selections = $has_stale_selections || count($entities) !== count($ids);
 
-      $widget = $this->buildWidget($filter, $entities, $ids);
+      $handler = $this->selectionManager->getInstance([
+        'target_type' => $filter->entityTypeId,
+        'target_bundles' => $filter->bundles ?: NULL,
+      ]);
+      $referenceable = $handler instanceof SelectionInterface ? $handler->validateReferenceableEntities(array_keys($entities)) : [];
+      $visible = array_filter(array_intersect_key($entities, array_fill_keys($referenceable, TRUE)), static fn (EntityInterface $entity): bool => $entity->access('view'));
+      $retained = array_map('intval', array_keys(array_diff_key($entities, $visible)));
+      $widget = $this->buildWidget($filter, $visible, array_map('intval', array_keys($visible)), $handler, $retained);
       $help = [];
       if ($filter->required) {
         $help[] = $this->t('A selection is required.');
-        if ($widget['#type'] === 'checkboxes') {
+        if ($widget['#type'] === 'checkboxes' && $retained === []) {
           $widget['#required'] = TRUE;
           $widget['#required_error'] = $this->t('Choose at least one item for @label.', ['@label' => $filter->label]);
         }
-        elseif ($widget['#type'] !== 'radios') {
+        elseif (!in_array($widget['#type'], ['radios', 'checkboxes'], TRUE)) {
           $widget['#attributes']['aria-required'] = 'true';
         }
       }
       if ($filter->multiple) {
         $help[] = $this->formatPlural($filter->max, 'Choose at most one item.', 'Choose at most @count items.');
+      }
+      if ($retained !== []) {
+        $help[] = $this->formatPlural(count($retained), "1 selected item isn't shown because you don't have access to it. It will be kept.", "@count selected items aren't shown because you don't have access to them. They will be kept.");
       }
       if ($help) {
         $help[] = $widget['#description'] ?? '';
@@ -166,6 +177,7 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
         '#type' => 'fieldset',
         '#title' => $filter->label,
         'ids' => $widget,
+        'retained' => ['#type' => 'value', '#value' => $retained],
       ];
       if ($widget['#type'] === 'radios') {
         $group['#attributes']['role'] = 'radiogroup';
@@ -202,9 +214,10 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
    *
    * @phpstan-param array<int|string, EntityInterface> $entities
    * @phpstan-param list<int> $ids
+   * @phpstan-param list<int> $retained
    * @phpstan-return array<string, mixed>
    */
-  private function buildWidget(SiftFilter $filter, array $entities, array $ids): array {
+  private function buildWidget(SiftFilter $filter, array $entities, array $ids, mixed $handler, array &$retained): array {
     $title = $filter->multiple
       ? $this->t('Select items for @label', ['@label' => $filter->label])
       : $this->t('Select an item for @label', ['@label' => $filter->label]);
@@ -222,10 +235,6 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
       return $autocomplete;
     }
 
-    $handler = $this->selectionManager->getInstance([
-      'target_type' => $filter->entityTypeId,
-      'target_bundles' => $filter->bundles ?: NULL,
-    ]);
     if (!$handler instanceof SelectionInterface) {
       return $autocomplete;
     }
@@ -238,6 +247,11 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
       // Core adds term hierarchy only when the lookup has no limit.
       $options = array_intersect_key(OptGroup::flattenOptions($handler->getReferenceableEntities()), $options);
     }
+    $option_entities = $this->entityTypeManager->getStorage($filter->entityTypeId)->loadMultiple(array_keys($options));
+    $option_entities = array_filter($option_entities, static fn (EntityInterface $entity): bool => $entity->access('view'));
+    $options = array_intersect_key($options, $option_entities);
+    $retained = [...$retained, ...array_map('intval', array_keys(array_diff_key($entities, $options)))];
+    $options = array_diff_key($options, array_fill_keys($retained, TRUE));
 
     $defaults = array_values(array_intersect_key($entities, $options));
     $default_ids = array_map(static fn (EntityInterface $entity): string => (string) $entity->id(), $defaults);
@@ -316,15 +330,19 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
     $filters = $element['#sift_filters'];
     $submitted = $form_state->getValue([...$element['#parents'], 'filters'], []);
     $values = [];
-    foreach (is_array($submitted) ? $submitted : [] as $id => $value) {
-      $filter = $filters[$id] ?? NULL;
-      if (!$filter || !is_array($value)) {
-        continue;
-      }
+    foreach ($filters as $id => $filter) {
+      $value = is_array($submitted) && is_array($submitted[$id] ?? NULL) ? $submitted[$id] : [];
       $ids = $value['ids'] ?? [];
       $ids = is_array($ids) ? $ids : [$ids];
+      $retained = $element['filters'][$id]['retained']['#value'] ?? [];
+      $entities = $retained ? \Drupal::entityTypeManager()->getStorage($filter->entityTypeId)->loadMultiple($retained) : [];
+      $entities = array_filter($entities, static fn (EntityInterface $entity): bool => $filter->bundles === [] || in_array($entity->bundle(), $filter->bundles, TRUE));
+      $retained = array_map('intval', array_keys($entities));
       $values[$id] = [
-        'ids' => array_map(static fn (mixed $item): mixed => is_array($item) ? ($item['target_id'] ?? NULL) : $item, $ids),
+        'ids' => [
+          ...$retained,
+          ...array_map(static fn (mixed $item): mixed => is_array($item) ? ($item['target_id'] ?? NULL) : $item, $ids),
+        ],
         'match' => $filter->supportsAll ? ($value['match'] ?? NULL) : NULL,
       ];
     }
