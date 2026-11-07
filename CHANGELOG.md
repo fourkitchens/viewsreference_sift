@@ -7,6 +7,8 @@ Views Reference Sift follows [Semantic Versioning][semver].
 
 ### Added
 
+- Lets editors hide items matching any selected value when a supported Sift
+  filter allows exclusion.
 - Adds an optional Drush command to preview and convert saved Views Reference
   arguments to Sift selections.
 - Adds fixed default selections for each Sift filter on a View display.

@@ -22,7 +22,7 @@ use Drupal\viewsreference_sift\Selection\SelectionNormalizer;
  * @internal
  *
  * @phpstan-type ArgumentLabel string|\Drupal\Component\Render\MarkupInterface
- * @phpstan-type FilterOptions array{enabled: bool, label: string, description: string, bundles: list<string>, default_ids: list<string>, match: string, widget: string, max: int, required: bool}
+ * @phpstan-type FilterOptions array{enabled: bool, label: string, description: string, bundles: list<string>, default_ids: list<string>, match: string, widget: string, max: int, required: bool, allow_exclude?: bool}
  */
 #[ViewsDisplayExtender(
   id: 'viewsreference_sift',
@@ -189,6 +189,14 @@ final class SiftDisplayExtender extends DisplayExtenderPluginBase {
           '#title' => $this->t('Match'),
           '#markup' => $this->t('This filter always matches any'),
         ];
+      if ($filter->exclusionTarget !== NULL) {
+        $form['filters'][$id]['allow_exclude'] = [
+          '#type' => 'checkbox',
+          '#title' => $this->t('Allow exclusion'),
+          '#description' => $this->t('Let editors exclude results that match any selected item.'),
+          '#default_value' => $settings['allow_exclude'] ?? FALSE,
+        ];
+      }
       $form['filters'][$id] += [
         'widget' => [
           '#type' => 'select',
@@ -376,6 +384,9 @@ final class SiftDisplayExtender extends DisplayExtenderPluginBase {
         'max' => $this->parseMaximum($values['max'] ?? NULL) ?? $defaults['max'],
         'required' => (bool) ($values['required'] ?? $defaults['required']),
       ];
+      if ($filter->exclusionTarget !== NULL && !empty($values['allow_exclude'])) {
+        $settings[$id]['allow_exclude'] = TRUE;
+      }
     }
     $this->options['filters'] = $settings;
   }

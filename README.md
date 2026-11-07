@@ -131,6 +131,12 @@ each filter, apply the changes, and save the View.
   more bundles. The default uses all bundles the validator allows.
 - **Match** lets the editor choose Any or All by default. You can also
   require Any or All on filters that support both modes.
+- **Allow exclusion** lets editors choose **Hide items that match**.
+  Hiding items always matches Any: an article tagged A and B is hidden
+  when the editor excludes A. This option is off by default and is
+  available for supported SQL filters on the view's base entity without
+  a relationship, including direct entity IDs, taxonomy terms without
+  depth, and entity reference fields.
 - **Widget** defaults to **Checkboxes** for bundle filters and
   **Autocomplete** for other filters. **Checkboxes** shows checkboxes for
   multiple-value filters and radio buttons for single-value filters. Optional
@@ -257,10 +263,14 @@ These contracts are stable across the 1.x series.
 - The stored selection format described below.
 - The display extender ID `viewsreference_sift` and its configuration schema.
   A filter's optional `default_ids` key stores a list of entity IDs as strings.
+  The optional `allow_exclude` boolean defaults to `false`.
   [Configuration schema](config/schema/viewsreference_sift.schema.yml)
 
 A saved selection uses version `2`, with `filters` keyed by contextual filter
 ID. Each filter has a list of `ids` and a `match` value of `any` or `all`.
+The optional `mode` is `include` or `exclude`. A missing or unknown mode uses
+`include`. Exclusion uses `any` and becomes inclusion if the display no
+longer allows it.
 Integer IDs are stored as positive integers. String IDs are nonempty strings
 of ASCII letters, digits, underscores, dots, and hyphens. Numeric-looking
 string IDs such as `'42'` stay strings. Views Reference serializes the
@@ -274,6 +284,7 @@ data:
       tid:
         ids: [12, 34]
         match: any
+        mode: exclude
       type:
         ids: ['article', 'page']
         match: any

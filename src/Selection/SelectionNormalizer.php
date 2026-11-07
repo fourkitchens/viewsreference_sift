@@ -11,7 +11,7 @@ use Drupal\viewsreference_sift\Filter\SiftFilter;
  *
  * @internal
  *
- * @phpstan-type StoredFilter array{ids: list<int|string>, match: value-of<MatchMode>}
+ * @phpstan-type StoredFilter array{ids: list<int|string>, match: value-of<MatchMode>, mode?: 'exclude'}
  */
 final class SelectionNormalizer {
 
@@ -60,8 +60,13 @@ final class SelectionNormalizer {
       }
 
       $match = $stored['match'] ?? NULL;
-      $mode = is_string($match) ? MatchMode::tryFrom($match) : NULL;
-      $selections[$filter_id] = new FilterSelection($ids, $filter->resolveMatch($mode ?? MatchMode::Any));
+      $match = is_string($match) ? MatchMode::tryFrom($match) : NULL;
+      $exclude = $filter->allowExclude && ($stored['mode'] ?? NULL) === SelectionMode::Exclude->value;
+      $selections[$filter_id] = new FilterSelection(
+        $ids,
+        $exclude ? MatchMode::Any : $filter->resolveMatch($match ?? MatchMode::Any),
+        $exclude ? SelectionMode::Exclude : SelectionMode::Include,
+      );
     }
     return new Selection($selections);
   }
@@ -97,6 +102,9 @@ final class SelectionNormalizer {
           'ids' => $filter->ids,
           'match' => $filter->match->value,
         ];
+        if ($filter->mode === SelectionMode::Exclude) {
+          $filters[$filter_id]['mode'] = $filter->mode->value;
+        }
       }
     }
     return [
