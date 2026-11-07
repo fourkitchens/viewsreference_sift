@@ -53,7 +53,8 @@ fix. [Views Reference issue #3583101][drupal-12]
    Composer root.
 
    ```sh
-   composer config repositories.viewsreference-sift vcs https://github.com/fourkitchens/viewsreference_sift.git
+   composer config repositories.viewsreference-sift vcs \
+     https://github.com/fourkitchens/viewsreference_sift.git
    composer require 'fourkitchens/viewsreference_sift:^1.0@beta' \
      'drupal/viewsreference:^2.0.0-beta14'
    drush en viewsreference_sift
