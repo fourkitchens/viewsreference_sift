@@ -133,8 +133,10 @@ final class SiftHooks {
 
     if (isset($view->element['#viewsreference']) && !isset($view->element['#viewsreference_sift']['trusted'])) {
       $data = $view->element['#viewsreference']['data'] ?? NULL;
+      $enabled = $view->element['#viewsreference']['enabled_settings'] ?? NULL;
       $view->element['#viewsreference_sift']['trusted'] = [
         'data' => is_array($data) ? ($data['sift_terms'] ?? NULL) : NULL,
+        'enabled' => is_array($enabled) && in_array('sift_terms', $enabled, TRUE),
       ];
     }
   }

@@ -67,6 +67,21 @@ final class SelectionNormalizer {
   }
 
   /**
+   * Reads display defaults using each enabled filter's ID and match settings.
+   *
+   * @phpstan-param array<string, SiftFilter> $filters
+   */
+  public function fromDefaults(array $filters): Selection {
+    $selections = [];
+    foreach ($filters as $id => $filter) {
+      if ($filter->enabled && ($ids = $this->normalizeIds($filter->defaultIds, $filter)) !== []) {
+        $selections[$id] = new FilterSelection($ids, $filter->resolveMatch(MatchMode::Any));
+      }
+    }
+    return new Selection($selections);
+  }
+
+  /**
    * Writes the selection as plain data for Views Reference storage.
    *
    * Uses arrays and scalar values because Views Reference reads serialized
@@ -96,7 +111,7 @@ final class SelectionNormalizer {
    * @phpstan-param array<array-key, mixed> $values
    * @phpstan-return list<int|string>
    */
-  private function normalizeIds(array $values, SiftFilter $filter): array {
+  public function normalizeIds(array $values, SiftFilter $filter): array {
     $ids = [];
     foreach ($values as $value) {
       if ($filter->idType === 'string') {

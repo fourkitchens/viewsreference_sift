@@ -7,6 +7,8 @@ Views Reference Sift follows [Semantic Versioning][semver].
 
 ### Added
 
+- Adds fixed default selections for each Sift filter on a View display.
+  Editors can override a default by choosing items for that filter.
 - Supports string entity IDs in Sift, including bundle filters and references
   to configuration entities.
 - Adds a Drupal Help page with field and display setup instructions.

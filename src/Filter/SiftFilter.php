@@ -22,6 +22,7 @@ final readonly class SiftFilter {
     'label' => '',
     'description' => '',
     'bundles' => [],
+    'default_ids' => [],
     'match' => 'editor',
     'widget' => 'autocomplete',
     'max' => self::DEFAULT_MAX,
@@ -67,9 +68,12 @@ final readonly class SiftFilter {
    *   Whether the display settings further restrict the Views bundles.
    * @param string $idType
    *   The entity ID type used in stored selections.
+   * @param string[] $defaultIds
+   *   The default entity IDs as stored in the display configuration.
    *
    * @phpstan-param list<string> $bundles
    * @phpstan-param 'integer'|'string' $idType
+   * @phpstan-param list<string> $defaultIds
    */
   public function __construct(
     public string $id,
@@ -90,6 +94,7 @@ final readonly class SiftFilter {
     public bool $required = FALSE,
     public bool $narrowsBundles = FALSE,
     public string $idType = 'integer',
+    public array $defaultIds = [],
   ) {}
 
   /**

@@ -122,6 +122,7 @@ class SiftDisplaySettingsTest extends WebDriverTestBase {
       'widget' => 'checkboxes',
       'max' => 2,
       'required' => TRUE,
+      'default_ids' => [],
     ];
     ksort($expected);
     ksort($saved);

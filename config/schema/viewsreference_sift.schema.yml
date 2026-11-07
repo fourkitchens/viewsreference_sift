@@ -24,6 +24,13 @@ views.display_extender.viewsreference_sift:
             sequence:
               type: string
               label: 'Bundle ID'
+          default_ids:
+            type: sequence
+            label: 'Default selection'
+            requiredKey: false
+            sequence:
+              type: string
+              label: 'Default entity ID'
           match:
             type: string
             label: 'Match mode'

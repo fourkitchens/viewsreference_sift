@@ -133,15 +133,26 @@ each filter, apply the changes, and save the View.
 - **Widget** defaults to **Checkboxes** for bundle filters and
   **Autocomplete** for other filters. **Checkboxes** shows checkboxes for
   multiple-value filters and radio buttons for single-value filters. Optional
-  radio groups include **None**. You can also choose **Select list**.
+  radio groups include **Use the default** when one is available, or **None**
+  otherwise. You can also choose **Select list**.
   **Checkboxes** and **Select list** switch to autocomplete above 100
   referenceable items.
 - **Maximum selections** defaults to 10. Set it from 1 to 50 for a filter
   that accepts multiple items. The widget shows this limit even when the
   default is used. A single-value filter accepts one item.
-- **Require a selection** asks the editor to choose at least one item before
-  saving. Required inputs show an instruction and expose their required
-  state to assistive technology. Off by default.
+- **Default selection** sets fixed items for a filter. Sift uses the valid
+  defaults when the editor leaves that filter empty. A field selection
+  overrides the default for its own filter. Defaults use the filter's
+  **Match** setting, with **Any** when the editor usually chooses.
+- **Require a selection** requires at least one item before saving. A valid
+  default selection satisfies this requirement. When the editor must choose
+  an item, the widget shows an instruction and exposes the required state to
+  assistive technology. Off by default.
+
+Sift applies these defaults to Views Reference embeds with **Sift filters**
+enabled, including on Views AJAX requests. Views' **Provide default value**
+handles a missing contextual argument and can use a fixed value or a value
+from the current page. Sift sends its selections as contextual arguments.
 
 Sift warns when the action for an earlier empty contextual filter can prevent
 a later Sift selection from applying. The warning names the earlier filter
@@ -156,8 +167,8 @@ the later selection applies only when the default is available at render time.
 
 In the contextual filter, choose **Provide default value** and a source
 from the current page. For example, use the current page's taxonomy term.
-Leave the Sift selection empty when editing the listing so Views supplies
-the default value.
+Leave Sift's **Default selection** blank and leave the field selection empty
+so Views supplies the value from the current page.
 
 #### Name the selection in the heading
 
@@ -199,6 +210,9 @@ display:
               widget: checkboxes
               max: 3
               required: false
+              default_ids:
+                - '12'
+                - '34'
 ```
 
 
@@ -209,6 +223,7 @@ These contracts are stable across the 1.x series.
 - The Views Reference setting plugin ID `sift_terms`.
 - The stored selection format described below.
 - The display extender ID `viewsreference_sift` and its configuration schema.
+  A filter's optional `default_ids` key stores a list of entity IDs as strings.
   [Configuration schema](config/schema/viewsreference_sift.schema.yml)
 
 A saved selection uses version `2`, with `filters` keyed by contextual filter
@@ -260,10 +275,11 @@ if the View provides them.
 Reference field on the block content or paragraph entity. The same setup
 works on other entities that have a Views Reference field.
 
-**Does Sift trust values from URLs?** On normal page requests, Sift uses only
-the selection saved on the field and ignores Sift values in the query string.
+**Does Sift trust values from URLs?** On normal page requests, Sift uses the
+selection saved on the field or the display default for an empty filter.
+It ignores Sift values in the query string.
 
-On Views AJAX requests, the values come from the browser. Sift caps the
+On Views AJAX requests, field selections come from the browser. Sift caps the
 selection and checks that IDs exist and belong to allowed bundles. Visitors
 can change the values. Drupal core already lets visitors change contextual
 filter values on AJAX-enabled displays. Never use contextual filters,

@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Drupal\viewsreference_sift\Plugin\views\display_extender;
 
+use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Entity\EntityTypeBundleInfoInterface;
+use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\StringTranslation\TranslatableMarkup;
 use Drupal\views\Attribute\ViewsDisplayExtender;
@@ -12,6 +14,7 @@ use Drupal\views\Plugin\views\display_extender\DisplayExtenderPluginBase;
 use Drupal\viewsreference_sift\Argument\ArgumentBuilder;
 use Drupal\viewsreference_sift\Filter\FilterResolver;
 use Drupal\viewsreference_sift\Filter\SiftFilter;
+use Drupal\viewsreference_sift\Selection\SelectionNormalizer;
 
 /**
  * Lets Views administrators configure Sift per display and contextual filter.
@@ -19,7 +22,7 @@ use Drupal\viewsreference_sift\Filter\SiftFilter;
  * @internal
  *
  * @phpstan-type ArgumentLabel string|\Drupal\Component\Render\MarkupInterface
- * @phpstan-type FilterOptions array{enabled: bool, label: string, description: string, bundles: list<string>, match: string, widget: string, max: int, required: bool}
+ * @phpstan-type FilterOptions array{enabled: bool, label: string, description: string, bundles: list<string>, default_ids: list<string>, match: string, widget: string, max: int, required: bool}
  */
 #[ViewsDisplayExtender(
   id: 'viewsreference_sift',
@@ -39,6 +42,8 @@ final class SiftDisplayExtender extends DisplayExtenderPluginBase {
     $plugin_definition,
     protected FilterResolver $filterResolver,
     protected EntityTypeBundleInfoInterface $bundleInfo,
+    protected EntityTypeManagerInterface $entityTypeManager,
+    protected SelectionNormalizer $selectionNormalizer,
   ) {
     parent::__construct($configuration, $plugin_id, $plugin_definition);
   }
@@ -207,10 +212,36 @@ final class SiftDisplayExtender extends DisplayExtenderPluginBase {
         'required' => [
           '#type' => 'checkbox',
           '#title' => $this->t('Require a selection'),
+          '#description' => $this->t('The default satisfies the selection requirement.'),
           '#default_value' => $settings['required'],
         ],
+        'default_ids' => $this->defaultSelectionElement($filter, $settings),
       ];
     }
+  }
+
+  /**
+   * Builds an entity picker restricted to the filter's current bundles.
+   *
+   * @phpstan-param FilterOptions $settings
+   * @phpstan-return array<string, mixed>
+   */
+  private function defaultSelectionElement(SiftFilter $filter, array $settings): array {
+    $bundles = $this->allowedBundles($filter, $settings['bundles']);
+    $ids = $this->selectionNormalizer->normalizeIds($settings['default_ids'], $filter);
+    $entities = $ids !== [] ? $this->entityTypeManager->getStorage($filter->entityTypeId)->loadMultiple($ids) : [];
+    if ($bundles !== NULL) {
+      $entities = array_filter($entities, static fn (EntityInterface $entity): bool => in_array($entity->bundle(), $bundles, TRUE));
+    }
+    return [
+      '#type' => 'entity_autocomplete',
+      '#title' => $this->t('Default selection'),
+      '#description' => $this->t('Choose fixed items to use when the editor leaves this filter empty.'),
+      '#target_type' => $filter->entityTypeId,
+      '#tags' => TRUE,
+      '#selection_settings' => ['target_bundles' => $bundles],
+      '#default_value' => array_values($entities),
+    ];
   }
 
   /**
@@ -259,9 +290,9 @@ final class SiftDisplayExtender extends DisplayExtenderPluginBase {
   }
 
   /**
-   * Checks that each supported filter has an integer maximum in range.
+   * Checks each maximum and the selected default entities.
    *
-   * Reports invalid maxima on their input before settings can be applied.
+   * Reports invalid values on their inputs before settings can be applied.
    *
    * @param array $form
    *   The Views options form containing the maximum inputs.
@@ -276,10 +307,37 @@ final class SiftDisplayExtender extends DisplayExtenderPluginBase {
     }
 
     $filters = $this->filterResolver->supportedFilters($this->displayHandler);
-    foreach (array_keys($filters) as $id) {
-      if ($this->parseMaximum($form_state->getValue(['filters', $id, 'max'])) === NULL) {
+    foreach ($filters as $id => $filter) {
+      $maximum = $this->parseMaximum($form_state->getValue(['filters', $id, 'max']));
+      if ($maximum === NULL) {
         $form_state->setError($form['filters'][$id]['max'], $this->t('Maximum selections must be a whole number from 1 to @max.', ['@max' => SiftFilter::MAX_LIMIT]));
+        continue;
       }
+      $parents = ['filters', $id, 'default_ids'];
+      $value = $form_state->getValue($parents);
+      $raw_ids = is_array($value) ? array_column($value, 'target_id') : [];
+      $raw_ids = array_filter($raw_ids, static fn (mixed $id): bool => is_string($id) || is_int($id));
+      $raw_ids = array_values(array_unique(array_map('strval', $raw_ids)));
+      $ids = $this->selectionNormalizer->normalizeIds($raw_ids, $filter);
+      $limit = $filter->multiple ? $maximum : 1;
+      if (count($ids) !== count($raw_ids)) {
+        $form_state->setError($form['filters'][$id]['default_ids'], $this->t('Choose valid default items.'));
+      }
+      elseif (count($ids) > $limit) {
+        $form_state->setError($form['filters'][$id]['default_ids'], $this->formatPlural($limit, 'Choose at most 1 default item.', 'Choose at most @count default items.'));
+      }
+      elseif ($ids !== []) {
+        $entities = $this->entityTypeManager->getStorage($filter->entityTypeId)->loadMultiple($ids);
+        $submitted = $this->submittedBundles($filter, $form_state->getValue(['filters', $id, 'bundles']));
+        $bundles = $this->allowedBundles($filter, $submitted);
+        if (count($entities) !== count($ids)) {
+          $form_state->setError($form['filters'][$id]['default_ids'], $this->t('Choose existing default items.'));
+        }
+        elseif ($bundles !== NULL && array_diff(array_map(static fn (EntityInterface $entity): string => $entity->bundle(), $entities), $bundles)) {
+          $form_state->setError($form['filters'][$id]['default_ids'], $this->t('Choose defaults from the allowed bundles.'));
+        }
+      }
+      $form_state->setValue($parents, array_map('strval', $ids));
     }
   }
 
@@ -305,14 +363,14 @@ final class SiftDisplayExtender extends DisplayExtenderPluginBase {
     $settings = [];
     foreach ($this->filterResolver->supportedFilters($this->displayHandler) as $id => $filter) {
       $values = is_array($submitted) && is_array($submitted[$id] ?? NULL) ? $submitted[$id] : [];
-      $bundles = is_array($values['bundles'] ?? NULL) ? array_filter($values['bundles'], 'is_string') : [];
       $match = $values['match'] ?? NULL;
       $widget = $values['widget'] ?? NULL;
       $settings[$id] = [
         'enabled' => (bool) ($values['enabled'] ?? $defaults['enabled']),
         'label' => is_string($values['label'] ?? NULL) ? $values['label'] : $defaults['label'],
         'description' => is_string($values['description'] ?? NULL) ? $values['description'] : $defaults['description'],
-        'bundles' => array_values(array_intersect(array_keys($this->bundleChoices($filter)), $bundles)),
+        'bundles' => $this->submittedBundles($filter, $values['bundles'] ?? NULL),
+        'default_ids' => $values['default_ids'] ?? [],
         'match' => $filter->supportsAll && in_array($match, ['editor', 'any', 'all'], TRUE) ? $match : $defaults['match'],
         'widget' => in_array($widget, ['autocomplete', 'checkboxes', 'select'], TRUE) ? $widget : $filter->widget,
         'max' => $this->parseMaximum($values['max'] ?? NULL) ?? $defaults['max'],
@@ -320,6 +378,31 @@ final class SiftDisplayExtender extends DisplayExtenderPluginBase {
       ];
     }
     $this->options['filters'] = $settings;
+  }
+
+  /**
+   * Keeps only the submitted bundle IDs that the form offered.
+   *
+   * @phpstan-return list<string>
+   */
+  private function submittedBundles(SiftFilter $filter, mixed $value): array {
+    // An unchecked checkbox is integer zero; a bundle ID may be string '0'.
+    $selected = is_array($value) ? array_filter($value, static fn (mixed $id): bool => is_string($id) || (is_int($id) && $id !== 0)) : [];
+    $offered = array_map('strval', array_keys($this->bundleChoices($filter)));
+    return array_values(array_intersect($offered, $selected));
+  }
+
+  /**
+   * Combines the contextual validator and the Sift bundle restrictions.
+   *
+   * @phpstan-param list<string> $selected
+   * @phpstan-return list<string>|null
+   */
+  private function allowedBundles(SiftFilter $filter, array $selected): ?array {
+    if ($selected === []) {
+      return $filter->bundles ?: NULL;
+    }
+    return $filter->bundles === [] ? $selected : array_values(array_intersect($filter->bundles, $selected));
   }
 
   /**

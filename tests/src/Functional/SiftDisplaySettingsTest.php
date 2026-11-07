@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\Tests\viewsreference_sift\Functional;
 
+use Drupal\taxonomy\Entity\Term;
 use Drupal\taxonomy\Entity\Vocabulary;
 use Drupal\Tests\BrowserTestBase;
 use Drupal\views\Entity\View;
@@ -31,8 +32,14 @@ class SiftDisplaySettingsTest extends BrowserTestBase {
    * Tests applying and saving filter options without JavaScript.
    */
   public function testEditDisplaySettings(): void {
-    Vocabulary::create(['vid' => 'tags', 'name' => 'Tags'])->save();
+    Vocabulary::create(['vid' => '123', 'name' => 'Tags'])->save();
     Vocabulary::create(['vid' => 'audience', 'name' => 'Audience'])->save();
+    $first = Term::create(['vid' => '123', 'name' => 'First topic']);
+    $first->save();
+    $second = Term::create(['vid' => '123', 'name' => 'Second topic']);
+    $second->save();
+    $outside = Term::create(['vid' => 'audience', 'name' => 'Audience topic']);
+    $outside->save();
     View::create([
       'id' => 'sift_settings_test',
       'label' => 'Sift settings test',
@@ -73,7 +80,7 @@ class SiftDisplaySettingsTest extends BrowserTestBase {
                 'break_phrase' => TRUE,
                 'specify_validation' => TRUE,
                 'validate' => ['type' => 'entity:taxonomy_term'],
-                'validate_options' => ['bundles' => ['tags' => 'tags', 'audience' => 'audience'], 'multiple' => 1],
+                'validate_options' => ['bundles' => ['123' => '123', 'audience' => 'audience'], 'multiple' => 1],
               ],
             ],
           ],
@@ -81,22 +88,39 @@ class SiftDisplaySettingsTest extends BrowserTestBase {
       ],
     ])->save();
 
-    $this->drupalLogin($this->drupalCreateUser(['administer views']));
+    $this->drupalLogin($this->drupalCreateUser(['administer views', 'access content']));
     $edit_path = 'admin/structure/views/view/sift_settings_test/edit/embed_terms';
     $this->drupalGet($edit_path);
     $this->assertSession()->linkExists('1 of 1 filter');
     // cspell:ignore nojs
     $this->drupalGet('admin/structure/views/nojs/display/sift_settings_test/embed_terms/viewsreference_sift');
+    $this->assertSession()->fieldExists('Default selection');
+    $bundles = [
+      'filters[tid][bundles][123]' => TRUE,
+      'filters[tid][bundles][audience]' => FALSE,
+    ];
+    $defaults = sprintf('First topic (%s), Second topic (%s)', $first->id(), $second->id());
+    $this->submitForm($bundles + [
+      'filters[tid][default_ids]' => sprintf('Audience topic (%s)', $outside->id()),
+    ], 'Apply');
+    $this->assertSession()->statusMessageContains('Choose defaults from the allowed bundles.', 'error');
+    $this->submitForm($bundles + [
+      'filters[tid][default_ids]' => $defaults,
+      'filters[tid][max]' => 1,
+    ], 'Apply');
+    $this->assertSession()->statusMessageContains('Choose at most 1 default item.', 'error');
+
     $this->submitForm([
       'filters[tid][enabled]' => FALSE,
       'filters[tid][label]' => 'Topics',
       'filters[tid][description]' => 'Choose topics to show.',
-      'filters[tid][bundles][tags]' => TRUE,
+      'filters[tid][bundles][123]' => TRUE,
       'filters[tid][bundles][audience]' => FALSE,
       'filters[tid][match]' => 'all',
       'filters[tid][widget]' => 'checkboxes',
       'filters[tid][max]' => 2,
       'filters[tid][required]' => TRUE,
+      'filters[tid][default_ids]' => $defaults,
     ], 'Apply');
     $this->submitForm([], 'Save');
     $this->assertSession()->statusMessageContains('The view Sift settings test has been saved.', 'status');
@@ -109,11 +133,12 @@ class SiftDisplaySettingsTest extends BrowserTestBase {
       'enabled' => FALSE,
       'label' => 'Topics',
       'description' => 'Choose topics to show.',
-      'bundles' => ['tags'],
+      'bundles' => ['123'],
       'match' => 'all',
       'widget' => 'checkboxes',
       'max' => 2,
       'required' => TRUE,
+      'default_ids' => [(string) $first->id(), (string) $second->id()],
     ];
     ksort($expected);
     ksort($saved);

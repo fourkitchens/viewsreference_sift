@@ -35,7 +35,22 @@ final class ValueSource {
     if (is_array($trusted)) {
       return $trusted['data'] ?? NULL;
     }
-    return $this->routeMatch->getRouteName() === 'views.ajax' ? $supplied : NULL;
+    return $this->isViewsAjax() ? $supplied : NULL;
+  }
+
+  /**
+   * Allows defaults only for a Sift-enabled embed or Views AJAX.
+   */
+  public function allowsDefaults(ViewExecutable $view): bool {
+    $trusted = $view->element['#viewsreference_sift']['trusted'] ?? NULL;
+    return is_array($trusted) ? !empty($trusted['enabled']) : $this->isViewsAjax();
+  }
+
+  /**
+   * Identifies a request to the core Views AJAX controller.
+   */
+  private function isViewsAjax(): bool {
+    return $this->routeMatch->getRouteName() === 'views.ajax';
   }
 
 }

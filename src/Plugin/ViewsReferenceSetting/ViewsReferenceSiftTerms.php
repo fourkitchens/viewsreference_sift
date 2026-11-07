@@ -22,6 +22,7 @@ use Drupal\views\ViewExecutable;
 use Drupal\viewsreference\Plugin\ViewsReferenceSettingInterface;
 use Drupal\viewsreference_sift\Filter\FilterResolver;
 use Drupal\viewsreference_sift\Filter\SiftFilter;
+use Drupal\viewsreference_sift\Selection\FilterSelection;
 use Drupal\viewsreference_sift\Selection\MatchMode;
 use Drupal\viewsreference_sift\Selection\Selection;
 use Drupal\viewsreference_sift\Selection\SelectionNormalizer;
@@ -123,6 +124,7 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
     }
 
     $selection = $this->selectionNormalizer->fromStorage($stored, $configured);
+    $defaults = $this->validatedDefaults($filters);
     $form_field['#type'] = 'fieldset';
     $form_field['#title'] = $this->t('Filter this list');
     $form_field['#tree'] = TRUE;
@@ -149,9 +151,17 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
       $referenceable = $handler instanceof SelectionInterface ? $handler->validateReferenceableEntities(array_keys($entities)) : [];
       $visible = array_filter(array_intersect_key($entities, array_fill_keys($referenceable, TRUE)), static fn (EntityInterface $entity): bool => $entity->access('view'));
       $retained = self::entityIds($filter, array_diff_key($entities, $visible));
-      $widget = $this->buildWidget($filter, $visible, $handler, $retained);
+      $default = $defaults->filters[$filter->id] ?? NULL;
+      $required = $filter->required && $default === NULL;
+      $widget = $this->buildWidget($filter, $visible, $handler, $retained, $default !== NULL);
       $help = [];
-      if ($filter->required) {
+      if ($default !== NULL) {
+        $help[] = $this->defaultHelp($filter, $default);
+        if ($filter->required) {
+          $help[] = $this->t('The default satisfies the selection requirement.');
+        }
+      }
+      if ($required) {
         $help[] = $this->t('A selection is required.');
         if ($widget['#type'] === 'checkboxes' && $retained === []) {
           $widget['#required'] = TRUE;
@@ -181,7 +191,7 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
       ];
       if ($widget['#type'] === 'radios') {
         $group['#attributes']['role'] = 'radiogroup';
-        if ($filter->required) {
+        if ($required) {
           $group['#attributes']['aria-required'] = 'true';
         }
       }
@@ -216,7 +226,7 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
    * @phpstan-param list<int|string> $retained
    * @phpstan-return array<string, mixed>
    */
-  private function buildWidget(SiftFilter $filter, array $entities, mixed $handler, array &$retained): array {
+  private function buildWidget(SiftFilter $filter, array $entities, mixed $handler, array &$retained, bool $has_default): array {
     $title = $filter->multiple
       ? $this->t('Select items for @label', ['@label' => $filter->label])
       : $this->t('Select an item for @label', ['@label' => $filter->label]);
@@ -268,19 +278,42 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
     ];
     if (!$filter->multiple && $filter->widget === 'checkboxes') {
       $widget['#type'] = 'radios';
-      $widget['#default_value'] = $default_ids[0] ?? ($filter->required ? NULL : '');
-      if (!$filter->required) {
-        $widget['#options'] = ['' => $this->t('None')] + $widget['#options'];
+      $required = $filter->required && !$has_default;
+      $widget['#default_value'] = $default_ids[0] ?? ($required ? NULL : '');
+      if (!$required) {
+        $widget['#options'] = ['' => $has_default ? $this->t('Use the default') : $this->t('None')] + $widget['#options'];
       }
     }
     if ($filter->widget === 'select') {
       $widget['#multiple'] = $filter->multiple;
       if (!$filter->multiple) {
-        $widget['#empty_option'] = $this->t('- Select -');
+        $widget['#empty_option'] = $has_default ? $this->t('Use the default') : $this->t('- Select -');
         $widget['#default_value'] = $default_ids[0] ?? '';
       }
     }
     return $widget;
+  }
+
+  /**
+   * Describes the fallback without exposing restricted entity labels.
+   */
+  private function defaultHelp(SiftFilter $filter, FilterSelection $default): TranslatableMarkup {
+    $entities = $this->entityTypeManager->getStorage($filter->entityTypeId)->loadMultiple($default->ids);
+    $visible = array_filter($entities, static fn (EntityInterface $entity): bool => $entity->access('view'));
+    if (count($visible) !== count($default->ids)) {
+      return $this->t('Leave empty to use the display default.');
+    }
+    $labels = array_map(static fn (EntityInterface $entity): string => (string) $entity->label(), $visible);
+    return $this->t('Leave empty to use the default: @items.', ['@items' => implode(', ', $labels)]);
+  }
+
+  /**
+   * Drops defaults that no longer fit the display or reference missing items.
+   *
+   * @phpstan-param array<string, SiftFilter> $filters
+   */
+  private function validatedDefaults(array $filters): Selection {
+    return $this->selectionValidator->validate($this->selectionNormalizer->fromDefaults($filters), $filters, strict: TRUE);
   }
 
   /**
@@ -315,7 +348,8 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
     }
     $value = $this->valueSource->resolve($view, $value);
     $selection = $this->selectionNormalizer->fromStorage($value, $filters);
-    $selection = $this->selectionValidator->validate($selection, $filters);
+    $defaults = $this->valueSource->allowsDefaults($view) ? $this->selectionNormalizer->fromDefaults($filters) : NULL;
+    $selection = $this->selectionValidator->validate($selection, $filters, defaults: $defaults);
     foreach ($selection->filters as $id => $selected) {
       $storage = $this->entityTypeManager->getStorage($filters[$id]->entityTypeId);
       foreach ($storage->loadMultiple($selected->ids) as $entity) {
@@ -367,11 +401,13 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
     $selection = $normalizer->fromStorage(['version' => Selection::VERSION, 'filters' => $values], $filters);
     $display = $form_state->getValue([...array_slice($element['#parents'], 0, -2), 'display_id']);
     if (is_string($display) && $display !== '') {
+      $required = array_filter(array_diff_key($filters, $selection->filters), static fn (SiftFilter $filter): bool => $filter->required);
+      $defaults = \Drupal::service(SelectionValidator::class)->validate($normalizer->fromDefaults($required), $required, strict: TRUE);
       foreach ($filters as $id => $filter) {
         $count = count($selection->filters[$id]->ids ?? []);
         $max = $filter->multiple ? $filter->max : 1;
         $message = match (TRUE) {
-          $filter->required && $count === 0 => new TranslatableMarkup('Choose at least one item for @label.', ['@label' => $filter->label]),
+          $filter->required && $count === 0 && !isset($defaults->filters[$id]) => new TranslatableMarkup('Choose at least one item for @label.', ['@label' => $filter->label]),
           $count > $max => new PluralTranslatableMarkup(
             $max,
             'Choose at most 1 item for @label.',

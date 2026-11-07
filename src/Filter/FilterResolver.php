@@ -188,6 +188,7 @@ final class FilterResolver {
         required: (bool) $configured['required'],
         narrowsBundles: $bundles !== $validator_bundles,
         idType: $id_type,
+        defaultIds: is_array($configured['default_ids']) ? array_values(array_filter($configured['default_ids'], 'is_string')) : [],
       );
     }
     return $filters;

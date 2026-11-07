@@ -460,10 +460,107 @@ class SiftTermsTest extends KernelTestBase {
   }
 
   /**
+   * Tests applying defaults on page and AJAX requests through Views Reference.
+   */
+  public function testDisplayDefaultSelection(): void {
+    $this->saveTermOptions([
+      'default_ids' => [(string) $this->termIds['A'], (string) $this->termIds['B']],
+      'match' => 'all',
+    ]);
+    $this->assertConfigSchemaByName('views.view.viewsreference_sift_test');
+
+    foreach ([FALSE, TRUE] as $ajax) {
+      $empty = $ajax ? '' : ['version' => 2, 'filters' => []];
+      $view = $this->executeWithSetting('embed_terms', $empty, $ajax);
+      $this->assertSame([$this->termIds['A'] . ',' . $this->termIds['B']], $view->args);
+      $this->assertResultTitles(['Both'], $view);
+      foreach (['A', 'B'] as $term) {
+        $this->assertContains('taxonomy_term:' . $this->termIds[$term], $view->element['#cache']['tags']);
+      }
+
+      $stored = $this->storedSelection('tid', [$this->termIds['A']]);
+      $view = $this->executeWithSetting('embed_terms', $stored, $ajax);
+      $this->assertSame([(string) $this->termIds['A']], $view->args);
+      $this->assertResultTitles(['A', 'Both'], $view);
+
+      $invalid = $this->storedSelection('tid', [$this->termIds['C']]);
+      $view = $this->executeWithSetting('embed_terms', $invalid, $ajax);
+      $this->assertSame([$this->termIds['A'] . ',' . $this->termIds['B']], $view->args);
+      $this->assertResultTitles(['Both'], $view);
+    }
+  }
+
+  /**
+   * Tests filling an empty filter alongside an explicit field selection.
+   */
+  public function testDisplayDefaultsFillOnlyEmptyFilters(): void {
+    $ids = $this->createMultipleFilterContent();
+    $this->config('views.settings')->set('display_extenders', ['viewsreference_sift'])->save();
+    $view = View::load('viewsreference_sift_test');
+    $this->assertInstanceOf(View::class, $view);
+    $display = &$view->getDisplay('embed_multi');
+    $display['display_options']['display_extenders']['viewsreference_sift']['filters'] = [
+      'tid_tags' => ['default_ids' => [(string) $this->termIds['B']]],
+      'tid_audience' => ['default_ids' => [(string) $ids['audience']]],
+    ];
+    $view->save();
+
+    $stored = $this->storedSelection('tid_tags', [$this->termIds['A']]);
+    $view = $this->executeWithSetting('embed_multi', $stored);
+    $this->assertSame([(string) $this->termIds['A'], (string) $ids['audience']], $view->args);
+    $this->assertResultTitles(['Both'], $view);
+  }
+
+  /**
+   * Tests dropping invalid defaults and preserving editor validation failures.
+   */
+  public function testInvalidDisplayDefaults(): void {
+    $deleted = Term::create(['vid' => 'tags', 'name' => 'Deleted default']);
+    $deleted->save();
+    $invalid = [(string) $deleted->id(), (string) $this->termIds['C']];
+    $this->saveTermOptions(['default_ids' => [...$invalid, (string) $this->termIds['A']]]);
+    $deleted->delete();
+
+    $view = $this->executeWithSetting('embed_terms', '');
+    $this->assertSame([(string) $this->termIds['A']], $view->args);
+    $this->assertResultTitles(['A', 'Both'], $view);
+
+    $this->saveTermOptions(['default_ids' => $invalid]);
+    $view = $this->executeWithSetting('embed_terms', '');
+    $this->assertSame([], $view->args);
+    $this->assertResultTitles(['A', 'B', 'Both', 'Neither'], $view);
+
+    $stored = $this->storedSelection('tid', [$this->termIds['C']]);
+    $view = $this->executeWithSetting('embed_terms', $stored, expected_success: FALSE);
+    $this->assertSame([(string) $this->termIds['C']], $view->args);
+    $this->assertTrue($view->build_info['fail']);
+  }
+
+  /**
+   * Tests that a display default satisfies required without storing an ID.
+   */
+  public function testRequiredDisplayDefault(): void {
+    $this->saveTermOptions([
+      'default_ids' => [(string) $this->termIds['A']],
+      'required' => TRUE,
+      'widget' => 'checkboxes',
+    ]);
+    $node = $this->createListing([]);
+    [$form, $state, $widget] = $this->preservedSelectionForm($node, ['filters' => ['tid' => ['ids' => []]]]);
+    $input = $form['listing']['widget'][0]['options']['sift_terms']['filters']['tid']['ids'];
+    $this->assertStringStartsWith('Leave empty to use the default: A.', (string) $input['#description']);
+    $this->assertStringContainsString('The default satisfies the selection requirement.', (string) $input['#description']);
+    $this->assertSame([], $input['#default_value']);
+    $this->assertFalse($input['#required'] ?? FALSE);
+    $this->assertEmpty($state->getErrors());
+    $this->assertSame(['version' => 2, 'filters' => []], $this->savePreservedSelection($node, $widget, $form, $state));
+  }
+
+  /**
    * Tests that a disabled filter contributes no widget or argument.
    */
   public function testDisabledDisplayFilter(): void {
-    $this->saveTermOptions(['enabled' => FALSE]);
+    $this->saveTermOptions(['enabled' => FALSE, 'default_ids' => [(string) $this->termIds['A']]]);
     $stored = $this->storedSelection('tid', [$this->termIds['A']]);
     $field = $this->termsElement('embed_terms', $stored);
     $this->assertSame('value', $field['#type']);
@@ -1394,6 +1491,12 @@ class SiftTermsTest extends KernelTestBase {
    * Tests that a standalone View ignores forged settings on both passes.
    */
   public function testStandaloneViewIgnoresForgedSelection(): void {
+    $this->config('views.settings')->set('display_extenders', ['viewsreference_sift'])->save();
+    $config = View::load('viewsreference_sift_test');
+    $this->assertInstanceOf(View::class, $config);
+    $display = &$config->getDisplay('page_terms');
+    $display['display_options']['display_extenders']['viewsreference_sift']['filters']['tid']['default_ids'] = [(string) $this->termIds['A']];
+    $config->save();
     $view = Views::getView('viewsreference_sift_test');
     $this->assertInstanceOf(ViewExecutable::class, $view);
     $this->assertTrue($view->setDisplay('page_terms'));

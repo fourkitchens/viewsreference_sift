@@ -25,13 +25,14 @@ final class SelectionValidator {
   /**
    * Caps selections before checking whether IDs exist in allowed bundles.
    *
-   * If none survive, keeps capped integer IDs so Views can apply its configured
-   * validation failure action, unless Sift narrows the allowed bundles. String
-   * IDs must exist even when the Views handler has no entity validator.
+   * Tries display defaults only for filters without valid editor selections.
+   * If neither survives, keeps capped integer IDs so Views can apply its
+   * configured failure action, unless Sift narrows the allowed bundles.
+   * Strict validation requires all returned IDs to exist.
    *
    * @phpstan-param array<string, \Drupal\viewsreference_sift\Filter\SiftFilter> $filters
    */
-  public function validate(Selection $selection, array $filters): Selection {
+  public function validate(Selection $selection, array $filters, bool $strict = FALSE, ?Selection $defaults = NULL): Selection {
     $capped = [];
     $by_type = [];
     foreach ($selection->filters as $id => $selected) {
@@ -44,10 +45,23 @@ final class SelectionValidator {
       $by_type[$filters[$id]->entityTypeId][$id] = $capped[$id];
     }
 
+    $validated = [];
     foreach ($by_type as $entity_type_id => $selections) {
-      $capped = array_replace($capped, $this->validateType($entity_type_id, $selections, $filters));
+      $validated += $this->validateType($entity_type_id, $selections, $filters);
     }
-    return new Selection(array_filter($capped));
+    if ($defaults !== NULL) {
+      $missing = array_diff_key($filters, $validated);
+      $validated += $this->validate($defaults, $missing, strict: TRUE)->filters;
+    }
+    if (!$strict) {
+      foreach (array_diff_key($capped, $validated) as $id => $selected) {
+        // Views can handle invalid IDs only for restrictions it knows about.
+        if (!$filters[$id]->narrowsBundles && $filters[$id]->idType === 'integer') {
+          $validated[$id] = $selected;
+        }
+      }
+    }
+    return new Selection($validated);
   }
 
   /**
@@ -55,7 +69,7 @@ final class SelectionValidator {
    *
    * @phpstan-param array<string, FilterSelection> $selections
    * @phpstan-param array<string, \Drupal\viewsreference_sift\Filter\SiftFilter> $filters
-   * @phpstan-return array<string, FilterSelection|null>
+   * @phpstan-return array<string, FilterSelection>
    */
   private function validateType(string $entity_type_id, array $selections, array $filters): array {
     $entity_type = $this->entityTypeManager->getDefinition($entity_type_id);
@@ -100,10 +114,9 @@ final class SelectionValidator {
         && ($bundles_by_id === NULL || $bundles === [] || in_array($bundles_by_id[$entity_id] ?? NULL, $bundles, TRUE))
       ));
 
-      // Views can handle invalid IDs only for restrictions it knows about.
-      $validated[$id] = $valid !== []
-        ? new FilterSelection($valid, $selected->match)
-        : ($filters[$id]->narrowsBundles || $filters[$id]->idType === 'string' ? NULL : $selected);
+      if ($valid !== []) {
+        $validated[$id] = new FilterSelection($valid, $selected->match);
+      }
     }
     return $validated;
   }
