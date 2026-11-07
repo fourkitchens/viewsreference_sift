@@ -41,7 +41,6 @@ Views Reference Sift follows [Semantic Versioning][semver].
   input states, and shows selection limits even when the default is used.
 - Clarifies which Sift values come from the field or browser and why
   contextual filters must never control access.
-- The Composer package is now `drupal/viewsreference_sift`.
 - Drupal 12 is no longer declared as supported until Views Reference
   supports it.
 - Updates the security reporting policy for Drupal.org.
