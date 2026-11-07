@@ -9,6 +9,8 @@ use Drupal\views\ViewExecutable;
 
 /**
  * Identifies which Sift selection may be used during view execution.
+ *
+ * @internal
  */
 final class ValueSource {
 

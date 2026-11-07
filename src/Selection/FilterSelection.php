@@ -6,6 +6,8 @@ namespace Drupal\viewsreference_sift\Selection;
 
 /**
  * Pairs entity IDs with the match mode for one contextual filter.
+ *
+ * @internal
  */
 final readonly class FilterSelection {
 

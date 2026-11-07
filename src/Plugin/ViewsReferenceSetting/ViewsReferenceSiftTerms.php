@@ -32,6 +32,8 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
 /**
  * Lets editors narrow an embedded view through its contextual filters.
  *
+ * @internal
+ *
  * @todo Convert the setting to an attribute after Views Reference releases
  *   its discovery fix.
  *   https://www.drupal.org/project/viewsreference/issues/3583101

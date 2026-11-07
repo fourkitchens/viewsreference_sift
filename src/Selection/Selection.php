@@ -6,6 +6,8 @@ namespace Drupal\viewsreference_sift\Selection;
 
 /**
  * Groups entity selections for one Views display by contextual filter ID.
+ *
+ * @internal
  */
 final readonly class Selection {
 

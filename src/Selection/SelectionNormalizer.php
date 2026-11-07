@@ -7,6 +7,8 @@ namespace Drupal\viewsreference_sift\Selection;
 /**
  * Adapts current and legacy field settings to the selection objects Sift uses.
  *
+ * @internal
+ *
  * @phpstan-type StoredFilter array{ids: list<int>, match: value-of<MatchMode>}
  */
 final class SelectionNormalizer {

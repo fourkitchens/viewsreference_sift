@@ -9,6 +9,8 @@ use Drupal\viewsreference_sift\Selection\Selection;
 
 /**
  * Keeps Sift selections aligned with the display's contextual arguments.
+ *
+ * @internal
  */
 final class ArgumentBuilder {
 

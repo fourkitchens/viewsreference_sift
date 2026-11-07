@@ -18,6 +18,8 @@ use Drupal\viewsreference_sift\Selection\SelectionNormalizer;
 
 /**
  * Provides module help and preserves saved Sift choices during View rendering.
+ *
+ * @internal
  */
 final class SiftHooks {
 

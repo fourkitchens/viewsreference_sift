@@ -19,6 +19,8 @@ use Symfony\Component\DependencyInjection\Attribute\Autowire;
 
 /**
  * Resolves which contextual arguments Sift can expose as entity selectors.
+ *
+ * @internal
  */
 final class FilterResolver {
 

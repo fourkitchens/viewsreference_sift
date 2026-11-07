@@ -6,6 +6,8 @@ namespace Drupal\viewsreference_sift\Selection;
 
 /**
  * Names the match modes shared by the editor widget and stored selections.
+ *
+ * @internal
  */
 enum MatchMode: string {
 

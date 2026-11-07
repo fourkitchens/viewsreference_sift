@@ -16,6 +16,8 @@ use Drupal\viewsreference_sift\Filter\SiftFilter;
 /**
  * Lets Views administrators configure Sift per display and contextual filter.
  *
+ * @internal
+ *
  * @phpstan-type ArgumentLabel string|\Drupal\Component\Render\MarkupInterface
  * @phpstan-type FilterOptions array{enabled: bool, label: string, description: string, bundles: list<string>, match: string, widget: string, max: int, required: bool}
  */

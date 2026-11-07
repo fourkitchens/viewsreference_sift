@@ -9,6 +9,8 @@ use Drupal\viewsreference_sift\Selection\MatchMode;
 
 /**
  * Carries the filter settings shared by the field widget and view execution.
+ *
+ * @internal
  */
 final readonly class SiftFilter {
 

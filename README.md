@@ -18,6 +18,7 @@ Sift supplies contextual filter values without requiring an exposed form.
     - [View](#view)
     - [Display settings](#display-settings)
     - [Recipes](#recipes)
+- [API and stability](#api-and-stability)
 - [Troubleshooting](#troubleshooting)
 - [FAQ](#faq)
 - [Maintainers](#maintainers)
@@ -187,6 +188,33 @@ display:
               max: 3
               required: false
 ```
+
+
+## API and stability
+
+These contracts are stable across the 1.x series.
+
+- The Views Reference setting plugin ID `sift_terms`.
+- The stored selection format described below.
+- The display extender ID `viewsreference_sift` and its configuration schema.
+  [Configuration schema](config/schema/viewsreference_sift.schema.yml)
+
+A saved selection uses version `2`, with `filters` keyed by contextual filter
+ID. Each filter has a list of positive integer `ids` and a `match` value of
+`any` or `all`. Views Reference serializes the containing `data` array on the
+field item. This example shows the decoded data.
+
+```yaml
+data:
+  sift_terms:
+    version: 2
+    filters:
+      tid:
+        ids: [12, 34]
+        match: any
+```
+
+All PHP classes and services are internal and may change in minor releases.
 
 
 ## Troubleshooting

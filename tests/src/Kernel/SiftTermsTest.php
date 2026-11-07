@@ -6,6 +6,7 @@ namespace Drupal\Tests\viewsreference_sift\Kernel;
 
 use Drupal\Core\Entity\Entity\EntityViewDisplay;
 use Drupal\Core\Field\FieldStorageDefinitionInterface;
+use Drupal\Core\Field\WidgetInterface;
 use Drupal\Core\Form\FormState;
 use Drupal\Core\Routing\RouteObjectInterface;
 use Drupal\field\Entity\FieldConfig;
@@ -647,9 +648,10 @@ class SiftTermsTest extends KernelTestBase {
   }
 
   /**
-   * Tests that widget validation writes versioned settings for storage.
+   * Pins the public stored format through widget validation and serialization.
    */
-  public function testWidgetValidation(): void {
+  #[DataProvider('storedMatchProvider')]
+  public function testWidgetValidation(string $match): void {
     $field = $this->termsElement('embed_terms');
     $field['#parents'] = ['field_listing', 0, 'options', 'sift_terms'];
     $form_state = new FormState();
@@ -662,7 +664,7 @@ class SiftTermsTest extends KernelTestBase {
             ['target_id' => $this->termIds['A']],
             ['target_id' => $this->termIds['B']],
           ],
-          'match' => 'all',
+          'match' => $match,
         ],
       ],
     ]);
@@ -670,10 +672,48 @@ class SiftTermsTest extends KernelTestBase {
     $callback = $field['#element_validate'][0];
     $this->assertIsCallable($callback);
     $callback($field, $form_state);
-    $this->assertSame(
-      $this->storedSelection('tid', [$this->termIds['B'], $this->termIds['A']], 'all'),
-      $form_state->getValue($field['#parents']),
-    );
+    $expected = [
+      'version' => 2,
+      'filters' => [
+        'tid' => [
+          'ids' => [$this->termIds['B'], $this->termIds['A']],
+          'match' => $match,
+        ],
+      ],
+    ];
+    $validated = $form_state->getValue($field['#parents']);
+    $this->assertSame($expected, $validated, 'Widget validation must preserve the public version 2 selection format.');
+
+    $items = $this->createListing([])->get('field_listing');
+    $widget = $this->container->get('plugin.manager.field.widget')->getInstance([
+      'field_definition' => $items->getFieldDefinition(),
+      'form_mode' => 'default',
+      'configuration' => ['type' => 'viewsreference_autocomplete'],
+    ]);
+    $this->assertInstanceOf(WidgetInterface::class, $widget);
+    $values = $widget->massageFormValues([
+      [
+        'target_id' => 'viewsreference_sift_test',
+        'display_id' => 'embed_terms',
+        'options' => ['sift_terms' => $validated],
+      ],
+    ], [], $form_state);
+    $this->assertIsString($values[0]['data']);
+    $stored = unserialize($values[0]['data'], ['allowed_classes' => FALSE]);
+    $this->assertIsArray($stored);
+    $this->assertSame($expected, $stored['sift_terms'] ?? NULL, 'Views Reference must serialize the exact public selection array under sift_terms.');
+  }
+
+  /**
+   * Provides the public stored match values without using internal enums.
+   *
+   * @phpstan-return array<string, array{string}>
+   */
+  public static function storedMatchProvider(): array {
+    return [
+      'any' => ['any'],
+      'all' => ['all'],
+    ];
   }
 
   /**

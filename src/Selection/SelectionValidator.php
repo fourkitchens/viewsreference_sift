@@ -9,6 +9,8 @@ use Drupal\Core\Entity\EntityTypeManagerInterface;
 
 /**
  * Enforces selection limits and entity restrictions before the view runs.
+ *
+ * @internal
  */
 final class SelectionValidator {
 

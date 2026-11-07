@@ -38,6 +38,8 @@ Views Reference Sift follows [Semantic Versioning][semver].
 - Enables strict typing in the Sift setting plugin.
 - Reuses resolved Sift filters when applying selections during rendering.
 - Updates the checkout, cache, and artifact CI actions to Node 24 releases.
+- Documents stable plugin IDs, the stored selection format, and display
+  configuration across 1.x, and marks PHP classes and services as internal.
 
 ### Security
 
