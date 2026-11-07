@@ -124,12 +124,17 @@ each filter, apply the changes, and save the View.
   more bundles. The default uses all bundles the validator allows.
 - **Match** lets the editor choose Any or All by default. You can also
   require Any or All on filters that support both modes.
-- **Widget** uses autocomplete by default. You can choose checkboxes or a
-  select list. Both switch to autocomplete above 100 referenceable items.
+- **Widget** uses autocomplete by default. **Checkboxes** shows checkboxes
+  for filters that accept multiple items and radio buttons for single-value
+  filters. Optional radio groups include **None**. You can also choose a
+  select list. These options switch to autocomplete above 100 referenceable
+  items.
 - **Maximum selections** defaults to 10. Set it from 1 to 50 for a filter
-  that accepts multiple items. A single-value filter accepts one item.
+  that accepts multiple items. The widget shows this limit even when the
+  default is used. A single-value filter accepts one item.
 - **Require a selection** asks the editor to choose at least one item before
-  saving. Off by default.
+  saving. Required inputs show an instruction and expose their required
+  state to assistive technology. Off by default.
 
 Sift warns when the action for an earlier empty contextual filter can prevent
 a later Sift selection from applying. The warning names the earlier filter
