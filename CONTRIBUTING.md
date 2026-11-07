@@ -35,6 +35,8 @@ on these upstream fixes.
 ## Run checks
 
 Run the coding standards and static analysis checks from the module checkout.
+For an equivalent Drupal development site, include Drush 13 in the site's
+Composer dependencies so PHPStan can check the optional migration command.
 
 ```sh
 ddev phpcs

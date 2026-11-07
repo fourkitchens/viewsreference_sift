@@ -18,6 +18,7 @@ Sift supplies contextual filter values without requiring an exposed form.
     - [View](#view)
     - [Display settings](#display-settings)
     - [Recipes](#recipes)
+- [Migrating from the Argument setting](#migrating-from-the-argument-setting)
 - [API and stability](#api-and-stability)
 - [Troubleshooting](#troubleshooting)
 - [FAQ](#faq)
@@ -216,6 +217,38 @@ display:
 ```
 
 
+## Migrating from the Argument setting
+
+Enable **Sift filters** alongside **Argument** in the Views Reference field
+settings. Configure Sift for the contextual filters on the chosen displays.
+With [Drush 13][drush] installed, preview the conversion from the site's root:
+
+```sh
+drush viewsreference-sift:convert-arguments \
+  --entity-type=node --bundle=article --field=field_listing
+```
+
+The command reports each item without saving. Omit any of the three filters
+to broaden the scan. It also reports fields that enable **Argument** but
+need **Sift filters** enabled.
+
+Plain IDs such as `12+15` (Any) or `12,15` (All) can move to Sift when the
+filter supports that match mode and all IDs pass validation. Tokens, invalid
+IDs, unsupported or disabled filters, and positions with a saved Sift
+selection stay in **Argument**. Converted positions use the filter's exception
+value to keep remaining arguments aligned. The command removes trailing
+placeholders when they can be omitted safely and clears **Argument** when
+nothing remains.
+
+Review the report and back up the site's database before running the same
+command with `--apply`. Run it while edits to the scanned content are paused.
+Apply saves changed items across translations,
+creating a logged revision where the entity type supports it. It skips
+entities with newer pending revisions so their drafts stay intact.
+References pinned to older revisions continue to use those revisions.
+Leave **Argument** enabled for fields with values the command did not convert.
+
+
 ## API and stability
 
 These contracts are stable across the 1.x series.
@@ -302,6 +335,7 @@ development and [SECURITY.md] for private reports.
 [project]: https://www.drupal.org/project/viewsreference_sift
 [exposed]: https://www.drupal.org/project/viewsreference_filter
 [viewsreference]: https://www.drupal.org/project/viewsreference
+[drush]: https://www.drush.org/13.x/
 [inline-errors]: https://www.drupal.org/docs/8/core/modules/inline-form-errors
 [drupal-12]: https://www.drupal.org/project/viewsreference/issues/3583101
 [four-kitchens]: https://github.com/fourkitchens

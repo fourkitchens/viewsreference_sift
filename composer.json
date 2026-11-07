@@ -14,7 +14,8 @@
     "drupal/viewsreference": "^2.0.0-beta14"
   },
   "require-dev": {
-    "drupal/coder": "^9.0"
+    "drupal/coder": "^9.0",
+    "drush/drush": "^13"
   },
   "minimum-stability": "beta",
   "prefer-stable": true,

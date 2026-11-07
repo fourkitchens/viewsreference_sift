@@ -3,6 +3,10 @@ services:
     autowire: true
   Drupal\viewsreference_sift\Filter\FilterResolver:
     autowire: true
+  Drupal\viewsreference_sift\Migration\ArgumentConverter:
+    autowire: true
+  Drupal\viewsreference_sift\Migration\ArgumentMigration:
+    autowire: true
   Drupal\viewsreference_sift\Selection\SelectionNormalizer:
     autowire: true
   Drupal\viewsreference_sift\Selection\SelectionValidator:
