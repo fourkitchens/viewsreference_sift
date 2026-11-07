@@ -256,3 +256,23 @@ display:
           validate:
             type: 'entity:user'
             fail: 'not found'
+  embed_content_types:
+    display_plugin: embed
+    id: embed_content_types
+    display_title: Content types
+    position: 7
+    display_options:
+      defaults:
+        arguments: false
+      arguments:
+        type:
+          id: type
+          table: node_field_data
+          field: type
+          entity_type: node
+          entity_field: type
+          plugin_id: node_type
+          break_phrase: true
+          default_action: ignore
+          exception:
+            value: all

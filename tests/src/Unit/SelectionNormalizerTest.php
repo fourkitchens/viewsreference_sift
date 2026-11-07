@@ -14,7 +14,7 @@ use PHPUnit\Framework\Attributes\Group;
 /**
  * Tests normalization of stored filter selections.
  *
- * @phpstan-type StoredFilter array{ids: list<int>, match: string}
+ * @phpstan-type StoredFilter array{ids: list<int|string>, match: string}
  */
 #[Group('viewsreference_sift')]
 class SelectionNormalizerTest extends UnitTestCase {
@@ -30,8 +30,9 @@ class SelectionNormalizerTest extends UnitTestCase {
   #[DataProvider('storedSelections')]
   public function testStoredSelection(mixed $stored, array $expected): void {
     $filters = [
-      'tid' => new SiftFilter('tid', 'taxonomy_index_tid', 0, 'taxonomy_term', [], TRUE, TRUE, 'all', 'ignore', 'Terms'),
-      'tid_depth' => new SiftFilter('tid_depth', 'taxonomy_index_tid_depth', 1, 'taxonomy_term', [], TRUE, FALSE, 'all', 'ignore', 'Terms with depth'),
+      'type' => new SiftFilter('type', 'node_type', 0, 'node_type', [], TRUE, FALSE, 'all', 'ignore', 'Content types', idType: 'string'),
+      'tid' => new SiftFilter('tid', 'taxonomy_index_tid', 1, 'taxonomy_term', [], TRUE, TRUE, 'all', 'ignore', 'Terms'),
+      'tid_depth' => new SiftFilter('tid_depth', 'taxonomy_index_tid_depth', 2, 'taxonomy_term', [], TRUE, FALSE, 'all', 'ignore', 'Terms with depth'),
     ];
     $normalizer = new SelectionNormalizer();
     $selection = $normalizer->fromStorage($stored, $filters);
@@ -65,9 +66,13 @@ class SelectionNormalizerTest extends UnitTestCase {
         'tid_depth' => ['ids' => [27], 'match' => 'any'],
       ],
     ];
-    yield 'beta1 integer and string IDs' => [
+    yield 'beta1 selects the first integer filter' => [
       ['terms' => [['target_id' => 12], ['target_id' => '15']], 'match' => 'all'],
       ['tid' => ['ids' => [12, 15], 'match' => 'all']],
+    ];
+    yield 'string argument uses any and keeps numeric strings' => [
+      ['version' => 2, 'filters' => ['type' => ['ids' => ['article', '123', 456], 'match' => 'all']]],
+      ['type' => ['ids' => ['article', '123'], 'match' => 'any']],
     ];
     yield 'empty string' => ['', []];
     yield 'null' => [NULL, []];

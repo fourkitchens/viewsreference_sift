@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drupal\viewsreference_sift\Selection;
 
+use Drupal\Core\Config\Entity\ConfigEntityTypeInterface;
 use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 
@@ -24,9 +25,9 @@ final class SelectionValidator {
   /**
    * Caps selections before checking whether IDs exist in allowed bundles.
    *
-   * If none survive, keeps the capped IDs so Views can apply its configured
-   * validation failure action. A filter with a Sift-only bundle restriction
-   * drops those IDs because Views cannot enforce that restriction.
+   * If none survive, keeps capped integer IDs so Views can apply its configured
+   * validation failure action, unless Sift narrows the allowed bundles. String
+   * IDs must exist even when the Views handler has no entity validator.
    *
    * @phpstan-param array<string, \Drupal\viewsreference_sift\Filter\SiftFilter> $filters
    */
@@ -65,6 +66,11 @@ final class SelectionValidator {
     $bundle_key = $entity_type->getKey('bundle');
     $storage = $this->entityTypeManager->getStorage($entity_type_id);
     $query = $storage->getQuery()->accessCheck(FALSE);
+    if ($entity_type instanceof ConfigEntityTypeInterface) {
+      // A top-level ID condition lets config queries load only these records.
+      $ids = array_map(static fn (FilterSelection $selected): array => $selected->ids, $selections);
+      $query->condition($id_key, array_merge(...array_values($ids)), 'IN');
+    }
     $conditions = $query->orConditionGroup();
     $check_bundles = FALSE;
 
@@ -89,7 +95,7 @@ final class SelectionValidator {
     $validated = [];
     foreach ($selections as $id => $selected) {
       $bundles = $filters[$id]->bundles;
-      $valid = array_values(array_filter($selected->ids, static fn (int $entity_id): bool =>
+      $valid = array_values(array_filter($selected->ids, static fn (int|string $entity_id): bool =>
         in_array((string) $entity_id, $existing, TRUE)
         && ($bundles_by_id === NULL || $bundles === [] || in_array($bundles_by_id[$entity_id] ?? NULL, $bundles, TRUE))
       ));
@@ -97,7 +103,7 @@ final class SelectionValidator {
       // Views can handle invalid IDs only for restrictions it knows about.
       $validated[$id] = $valid !== []
         ? new FilterSelection($valid, $selected->match)
-        : ($filters[$id]->narrowsBundles ? NULL : $selected);
+        : ($filters[$id]->narrowsBundles || $filters[$id]->idType === 'string' ? NULL : $selected);
     }
     return $validated;
   }

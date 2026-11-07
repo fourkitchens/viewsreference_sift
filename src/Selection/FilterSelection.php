@@ -14,7 +14,7 @@ final readonly class FilterSelection {
   /**
    * Keeps selected IDs in editor order for argument building and limits.
    *
-   * @phpstan-param list<int> $ids
+   * @phpstan-param list<int|string> $ids
    */
   public function __construct(
     public array $ids,

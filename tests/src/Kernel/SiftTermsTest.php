@@ -10,6 +10,7 @@ use Drupal\Core\Field\WidgetInterface;
 use Drupal\Core\Form\FormState;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Routing\RouteObjectInterface;
+use Drupal\entity_test\Entity\EntityTestStringId;
 use Drupal\field\Entity\FieldConfig;
 use Drupal\field\Entity\FieldStorageConfig;
 use Drupal\KernelTests\KernelTestBase;
@@ -30,6 +31,7 @@ use Drupal\viewsreference_sift\Filter\FilterResolver;
 use Drupal\viewsreference_sift\Filter\SiftFilter;
 use Drupal\viewsreference_sift\Hook\SiftHooks;
 use Drupal\viewsreference_sift\Plugin\views\display_extender\SiftDisplayExtender;
+use Drupal\viewsreference_sift\Selection\SelectionNormalizer;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
@@ -145,6 +147,179 @@ class SiftTermsTest extends KernelTestBase {
       $this->termIds['B'] . '+' . $this->termIds['C'],
     ]);
     $this->assertResultTitles(['A', 'Both'], $this->executeWithSetting('embed_terms', $malformed, TRUE));
+  }
+
+  /**
+   * Tests native Content: Type arguments, string IDs, and cache tags.
+   */
+  public function testContentTypeArguments(): void {
+    NodeType::create(['type' => 'page', 'name' => 'Basic page'])->save();
+    Node::create(['type' => 'page', 'title' => 'Basic page item', 'status' => TRUE])->save();
+    Node::create(['type' => 'program', 'title' => 'Program item', 'status' => TRUE])->save();
+
+    $filters = $this->container->get(FilterResolver::class)->forDisplay('viewsreference_sift_test', 'embed_content_types');
+    $this->assertSame(['type'], array_keys($filters));
+    $this->assertSame('node_type', $filters['type']->entityTypeId);
+    $this->assertSame('string', $filters['type']->idType);
+    $this->assertSame('checkboxes', $filters['type']->widget);
+    $this->assertFalse($filters['type']->supportsAll);
+
+    $stored = [
+      'version' => 2,
+      'filters' => [
+        'type' => [
+          'ids' => [
+            'article', 'page', 'article', 'missing', '007', 'A-B_c.d',
+            7, 7.5, TRUE, [], '', 'article+page', 'article,page',
+            'article/page', 'article page', ' article', "page\n", "\u{00e9}",
+          ],
+          'match' => 'any',
+        ],
+      ],
+    ];
+    $normalized = $this->container->get(SelectionNormalizer::class)->fromStorage($stored, $filters);
+    $this->assertSame(['article', 'page', 'missing', '007', 'A-B_c.d'], $normalized->filters['type']->ids);
+
+    $view = $this->executeWithSetting('embed_content_types', $stored, TRUE);
+    $this->assertSame(['article+page'], $view->args);
+    $this->assertResultTitles(['A', 'B', 'Both', 'Neither', 'Basic page item'], $view);
+    $missing = $this->executeWithSetting('embed_content_types', $this->storedSelection('type', ['missing']), TRUE);
+    $this->assertSame([], $missing->args);
+
+    $node = $this->createListing([]);
+    $node->set('field_listing', [
+      'target_id' => 'viewsreference_sift_test',
+      'display_id' => 'embed_content_types',
+      'data' => serialize(['sift_terms' => $this->storedSelection('type', ['article', 'page'])]),
+    ])->save();
+    $build = $node->get('field_listing')->view(['type' => 'viewsreference_formatter', 'label' => 'hidden']);
+    $markup = (string) $this->container->get('renderer')->renderRoot($build);
+    $this->assertStringContainsString('>Basic page item<', $markup);
+    $this->assertStringNotContainsString('>Program item<', $markup);
+    $this->assertContains('config:node.type.article', $build['#cache']['tags']);
+    $this->assertContains('config:node.type.page', $build['#cache']['tags']);
+  }
+
+  /**
+   * Tests widgets and the serialized version 2 format for string IDs.
+   */
+  public function testContentTypeWidgets(): void {
+    NodeType::create(['type' => 'page', 'name' => 'Basic page'])->save();
+    NodeType::create(['type' => '123', 'name' => 'Numbered type'])->save();
+    $expected = [
+      'version' => 2,
+      'filters' => ['type' => ['ids' => ['article', 'page', '123'], 'match' => 'any']],
+    ];
+    $executable = Views::getView('viewsreference_sift_test');
+    $this->assertInstanceOf(ViewExecutable::class, $executable);
+    $this->assertTrue($executable->setDisplay('embed_content_types'));
+    $extender = $this->container->get('plugin.manager.views.display_extender')->createInstance('viewsreference_sift');
+    $this->assertInstanceOf(SiftDisplayExtender::class, $extender);
+    $extender->init($executable, $executable->display_handler);
+    $options = ['#title' => ''];
+    $extender->buildOptionsForm($options, (new FormState())->set('section', 'viewsreference_sift'));
+    $this->assertArrayHasKey('type', $options['filters']);
+    $this->assertSame('checkboxes', $options['filters']['type']['widget']['#default_value']);
+
+    $this->config('views.settings')->set('display_extenders', ['viewsreference_sift'])->save();
+    $view = View::load('viewsreference_sift_test');
+    $this->assertInstanceOf(View::class, $view);
+    $display = &$view->getDisplay('embed_content_types');
+    $node = $this->createListing([]);
+    $node->get('field_listing')->first()?->set('display_id', 'embed_content_types');
+    foreach (['select', 'autocomplete', 'checkboxes'] as $type) {
+      $display['display_options']['display_extenders']['viewsreference_sift']['filters']['type'] = ['widget' => $type] + SiftFilter::DEFAULT_OPTIONS;
+      $view->save();
+      $field = $this->termsElement('embed_content_types', $expected);
+      $this->assertArrayHasKey('type', $field['filters'] ?? []);
+      $group = $field['filters']['type'];
+      $this->assertArrayNotHasKey('match', $group);
+      $widget = $group['ids'];
+      if ($type === 'autocomplete') {
+        $this->assertSame('entity_autocomplete', $widget['#type']);
+        $this->assertSame('node_type', $widget['#target_type']);
+        $this->assertSame(['article', 'page', '123'], array_map(static fn (NodeType $bundle): string => $bundle->id(), $widget['#default_value']));
+      }
+      else {
+        $this->assertSame($type, $widget['#type']);
+        $this->assertSame('Basic page', (string) $widget['#options']['page']);
+        $this->assertSame('Numbered type', (string) $widget['#options'][123]);
+        $this->assertSame(['article', 'page', '123'], $widget['#default_value']);
+      }
+      $ids = match ($type) {
+        'select' => ['article', 'page', '123'],
+        'autocomplete' => 'Article (article), Basic page (page), Numbered type (123)',
+        default => ['article' => 'article', 'page' => 'page', 123 => '123'],
+      };
+      $submitted = ['filters' => ['type' => ['ids' => $ids]]];
+      [$form, $state, $reference_widget] = $this->preservedSelectionForm($node, $submitted, display: 'embed_content_types');
+      $this->assertEmpty($state->getErrors(), "$type must accept the string IDs.");
+      $this->assertSame($expected, $this->savePreservedSelection($node, $reference_widget, $form, $state));
+    }
+  }
+
+  /**
+   * Tests a string ID from native entity-reference Views data.
+   */
+  public function testStringEntityReferenceArgument(): void {
+    $this->createEntityReferenceField('node', 'article', 'field_content_type', 'Content type', 'node_type');
+    $node = Node::load($this->nodeIds['A']);
+    $this->assertInstanceOf(NodeInterface::class, $node);
+    $node->set('field_content_type', 'program')->save();
+    $node = Node::load($this->nodeIds['B']);
+    $this->assertInstanceOf(NodeInterface::class, $node);
+    $node->set('field_content_type', 'article')->save();
+    $view = View::load('viewsreference_sift_test');
+    $this->assertInstanceOf(View::class, $view);
+    $display = &$view->getDisplay('embed_content_types');
+    $display['display_options']['arguments'] = [
+      'field_content_type_target_id' => [
+        'id' => 'field_content_type_target_id',
+        'table' => 'node__field_content_type',
+        'field' => 'field_content_type_target_id',
+        'plugin_id' => 'entity_target_id',
+        'break_phrase' => TRUE,
+      ],
+    ];
+    $view->save();
+
+    $stored = $this->storedSelection('field_content_type_target_id', ['program']);
+    $view = $this->executeWithSetting('embed_content_types', $stored);
+    $this->assertSame(['program'], $view->args);
+    $this->assertResultTitles(['A'], $view);
+  }
+
+  /**
+   * Tests a string argument with an entity validator for a content entity.
+   */
+  public function testStringContentEntityValidator(): void {
+    $this->enableModules(['entity_test']);
+    $this->installEntitySchema('entity_test_string_id');
+    foreach (['Alpha.ID' => 'allowed', 'beta-2' => 'allowed', 'outside' => 'other'] as $id => $bundle) {
+      EntityTestStringId::create(['id' => $id, 'type' => $bundle, 'name' => $id])->save();
+      Node::create(['type' => 'article', 'title' => $id, 'status' => TRUE])->save();
+    }
+    $view = View::load('viewsreference_sift_test');
+    $this->assertInstanceOf(View::class, $view);
+    $display = &$view->getDisplay('embed_content_types');
+    $display['display_options']['arguments'] = [
+      'title' => [
+        'id' => 'title',
+        'table' => 'node_field_data',
+        'field' => 'title',
+        'plugin_id' => 'string',
+        'break_phrase' => TRUE,
+        'specify_validation' => TRUE,
+        'validate' => ['type' => 'entity:entity_test_string_id', 'fail' => 'not found'],
+        'validate_options' => ['bundles' => ['allowed' => 'allowed'], 'multiple' => 1],
+      ],
+    ];
+    $view->save();
+
+    $stored = $this->storedSelection('title', ['Alpha.ID', 'outside', 'missing', 'beta-2']);
+    $view = $this->executeWithSetting('embed_content_types', $stored);
+    $this->assertSame(['Alpha.ID+beta-2'], $view->args);
+    $this->assertResultTitles(['Alpha.ID', 'beta-2'], $view);
   }
 
   /**

@@ -70,8 +70,8 @@ final class SiftDisplayExtender extends DisplayExtenderPluginBase {
     $dependencies = $this->argumentDependencies();
     $enabled = 0;
     $blocked = 0;
-    foreach (array_keys($filters) as $id) {
-      if ($this->filterOptions($id)['enabled']) {
+    foreach ($filters as $id => $filter) {
+      if ($this->filterOptions($filter)['enabled']) {
         $enabled++;
         $blocked += isset($dependencies[$id]['blocker']) ? 1 : 0;
       }
@@ -114,7 +114,7 @@ final class SiftDisplayExtender extends DisplayExtenderPluginBase {
     }
 
     foreach ($filters as $id => $filter) {
-      $settings = $this->filterOptions($id);
+      $settings = $this->filterOptions($filter);
       $form['filters'][$id] = [
         '#type' => 'details',
         '#title' => $filter->label,
@@ -314,7 +314,7 @@ final class SiftDisplayExtender extends DisplayExtenderPluginBase {
         'description' => is_string($values['description'] ?? NULL) ? $values['description'] : $defaults['description'],
         'bundles' => array_values(array_intersect(array_keys($this->bundleChoices($filter)), $bundles)),
         'match' => $filter->supportsAll && in_array($match, ['editor', 'any', 'all'], TRUE) ? $match : $defaults['match'],
-        'widget' => in_array($widget, ['autocomplete', 'checkboxes', 'select'], TRUE) ? $widget : $defaults['widget'],
+        'widget' => in_array($widget, ['autocomplete', 'checkboxes', 'select'], TRUE) ? $widget : $filter->widget,
         'max' => $this->parseMaximum($values['max'] ?? NULL) ?? $defaults['max'],
         'required' => (bool) ($values['required'] ?? $defaults['required']),
       ];
@@ -327,10 +327,10 @@ final class SiftDisplayExtender extends DisplayExtenderPluginBase {
    *
    * @phpstan-return FilterOptions
    */
-  private function filterOptions(string $id): array {
+  private function filterOptions(SiftFilter $filter): array {
     /** @var array<string, FilterOptions> $configured */
     $configured = $this->options['filters'] ?? [];
-    return ($configured[$id] ?? []) + SiftFilter::DEFAULT_OPTIONS;
+    return ($configured[$filter->id] ?? []) + ['widget' => $filter->widget] + SiftFilter::DEFAULT_OPTIONS;
   }
 
   /**
