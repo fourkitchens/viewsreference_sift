@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Drupal\viewsreference_sift\Plugin\ViewsReferenceSetting;
 
 use Drupal\Component\Plugin\PluginBase;
