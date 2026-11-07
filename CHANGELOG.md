@@ -22,6 +22,8 @@ Views Reference Sift follows [Semantic Versioning][semver].
   at most one item.
 - Skips automatic extender enablement during configuration imports and
   leaves individual View settings to the import on uninstall.
+- Keeps experimental Drupal 12 widget tests running with a test-only
+  Views Reference return type patch.
 
 ### Changed
 

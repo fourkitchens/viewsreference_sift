@@ -1,0 +1,12 @@
+diff --git a/src/Plugin/Field/FieldWidget/ViewsReferenceTrait.php b/src/Plugin/Field/FieldWidget/ViewsReferenceTrait.php
+--- a/src/Plugin/Field/FieldWidget/ViewsReferenceTrait.php
++++ b/src/Plugin/Field/FieldWidget/ViewsReferenceTrait.php
+@@ -442,7 +442,7 @@
+    * @return array
+    *   An array of field values, keyed by delta.
+    */
+-  public function massageFormValues(array $values, array $form, FormStateInterface $form_state) {
++  public function massageFormValues(array $values, array $form, FormStateInterface $form_state): array {
+     $values = parent::massageFormValues($values, $form, $form_state);
+     foreach ($values as $key => $value) {
+       if (isset($value['options']) && is_array($value['options'])) {

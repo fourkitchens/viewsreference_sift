@@ -116,13 +116,15 @@ jobs:
         # cspell:ignore cweagans repatch
         run: |
           cp "$GITHUB_WORKSPACE/tests/patches/viewsreference-attribute.patch" \
-            "$GITHUB_WORKSPACE/tests/patches/viewsreference-cacheability.patch" .
+            "$GITHUB_WORKSPACE/tests/patches/viewsreference-cacheability.patch" \
+            "$GITHUB_WORKSPACE/tests/patches/viewsreference-widget-return.patch" .
           cat > patches.json <<'EOF'
           {
             "patches": {
               "drupal/viewsreference": {
                 "Support setting attribute discovery": "viewsreference-attribute.patch",
-                "Use the merged cache metadata on PHP 8.5": "viewsreference-cacheability.patch"
+                "Use the merged cache metadata on PHP 8.5": "viewsreference-cacheability.patch",
+                "Match the Drupal 12 widget return type": "viewsreference-widget-return.patch"
               }
             }
           }
