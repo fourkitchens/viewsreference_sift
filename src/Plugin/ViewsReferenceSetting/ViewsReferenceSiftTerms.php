@@ -29,6 +29,7 @@ use Drupal\viewsreference_sift\Selection\SelectionMode;
 use Drupal\viewsreference_sift\Selection\SelectionNormalizer;
 use Drupal\viewsreference_sift\Selection\SelectionValidator;
 use Drupal\viewsreference_sift\Selection\ValueSource;
+use Drupal\viewsreference_sift\Widget\SiftAutocompleteWidget;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
@@ -219,8 +220,8 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
           '#type' => 'radios',
           '#title' => $this->t('Match'),
           '#options' => [
-            MatchMode::Any->value => $this->t('Any of these items'),
-            MatchMode::All->value => $this->t('All of these items'),
+            MatchMode::Any->value => $this->t('Match at least one selected item'),
+            MatchMode::All->value => $this->t('Match every selected item'),
           ],
           '#default_value' => ($selected->match ?? MatchMode::Any)->value,
         ];
@@ -393,8 +394,14 @@ final class ViewsReferenceSiftTerms extends PluginBase implements ViewsReference
     $values = [];
     foreach ($filters as $id => $filter) {
       $value = is_array($submitted) && is_array($submitted[$id] ?? NULL) ? $submitted[$id] : [];
-      $ids = $value['ids'] ?? [];
-      $ids = array_map(static fn (mixed $item): mixed => is_array($item) ? ($item['target_id'] ?? NULL) : $item, is_array($ids) ? $ids : [$ids]);
+      $widget = $element['filters'][$id]['ids'];
+      if (isset($widget['#sift_widget'])) {
+        $ids = SiftAutocompleteWidget::extractIds($widget, $form_state);
+      }
+      else {
+        $ids = $value['ids'] ?? [];
+        $ids = array_map(static fn (mixed $item): mixed => is_array($item) ? ($item['target_id'] ?? NULL) : $item, is_array($ids) ? $ids : [$ids]);
+      }
       if ($filter->idType === 'string') {
         // Form API may use integer option keys for numeric string IDs.
         $checkboxes = ($element['filters'][$id]['ids']['#type'] ?? NULL) === 'checkboxes';

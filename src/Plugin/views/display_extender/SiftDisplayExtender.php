@@ -179,15 +179,15 @@ final class SiftDisplayExtender extends DisplayExtenderPluginBase {
           '#title' => $this->t('Match'),
           '#options' => [
             'editor' => $this->t('Let the editor choose'),
-            'any' => $this->t('Always match any'),
-            'all' => $this->t('Always match all'),
+            'any' => $this->t('Always match at least one selected item'),
+            'all' => $this->t('Always match every selected item'),
           ],
           '#default_value' => $settings['match'],
         ]
         : [
           '#type' => 'item',
           '#title' => $this->t('Match'),
-          '#markup' => $this->t('This filter always matches any'),
+          '#markup' => $this->t('This filter always matches at least one selected item.'),
         ];
       if ($filter->exclusionTarget !== NULL) {
         $form['filters'][$id]['allow_exclude'] = [

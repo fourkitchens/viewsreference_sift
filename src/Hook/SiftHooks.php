@@ -6,6 +6,8 @@ namespace Drupal\viewsreference_sift\Hook;
 
 use Drupal\Component\Utility\NestedArray;
 use Drupal\Core\Entity\Element\EntityAutocomplete;
+use Drupal\Core\Field\FieldDefinitionInterface;
+use Drupal\Core\Field\WidgetInterface;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Hook\Attribute\Hook;
 use Drupal\Core\Hook\Attribute\ReorderHook;
@@ -22,6 +24,7 @@ use Drupal\viewsreference_sift\Argument\ArgumentBuilder;
 use Drupal\viewsreference_sift\Filter\ExclusionTarget;
 use Drupal\viewsreference_sift\Selection\SelectionMode;
 use Drupal\viewsreference_sift\Selection\SelectionNormalizer;
+use Drupal\viewsreference_sift\Widget\SiftAutocompleteWidget;
 
 /**
  * Provides help and preserves saved Sift choices in forms and Views.
@@ -124,6 +127,56 @@ final class SiftHooks {
     $setting['#attributes'] = ($element['options']['sift_terms']['#attributes'] ?? []) + ($setting['#attributes'] ?? []);
     $element['options']['sift_terms'] = $setting;
     $form_state->setUserInput($input);
+  }
+
+  /**
+   * Offers the Sift autocomplete override on Views Reference widgets.
+   *
+   * @phpstan-return array<string, mixed>
+   */
+  #[Hook('field_widget_third_party_settings_form')]
+  public function widgetSettingsForm(WidgetInterface $plugin, FieldDefinitionInterface $field_definition): array {
+    $enabled_settings = $field_definition->getSetting('enabled_settings');
+    if (!in_array($plugin->getPluginId(), ['viewsreference_autocomplete', 'viewsreference_select'], TRUE)
+      || !is_array($enabled_settings) || !in_array('sift_terms', $enabled_settings, TRUE)) {
+      return [];
+    }
+    $options = SiftAutocompleteWidget::options();
+    $selected = $plugin->getThirdPartySetting('viewsreference_sift', 'autocomplete_widget', '');
+    return [
+      'autocomplete_widget' => [
+        '#type' => 'select',
+        '#title' => $this->t('Sift autocomplete widget'),
+        '#options' => $options,
+        '#default_value' => isset($options[$selected]) ? $selected : '',
+        '#description' => $this->t('Choose the widget for Sift filters configured to use autocomplete in Views.'),
+      ],
+    ];
+  }
+
+  /**
+   * Replaces Sift autocomplete fields after Views Reference rebuilds them.
+   *
+   * @phpstan-param array<array-key, mixed> $element
+   * @phpstan-param array{items: \Drupal\Core\Field\FieldItemListInterface<\Drupal\Core\Field\FieldItemInterface>, delta: int, widget: \Drupal\Core\Field\WidgetInterface, form: array<array-key, mixed>} $context
+   */
+  #[Hook('field_widget_single_element_viewsreference_autocomplete_form_alter', order: Order::Last)]
+  #[Hook('field_widget_single_element_viewsreference_select_form_alter', order: Order::Last)]
+  public function applyAutocompleteWidget(array &$element, FormStateInterface $form_state, array $context): void {
+    $filters = $element['options']['sift_terms']['#sift_filters'] ?? [];
+    $widget_id = $context['widget']->getThirdPartySetting('viewsreference_sift', 'autocomplete_widget', '');
+    if ($filters === [] || $widget_id === '' || !isset(SiftAutocompleteWidget::options()[$widget_id])) {
+      return;
+    }
+
+    $items = $context['items'];
+    $parents = [...($context['form']['#parents'] ?? []), $items->getName(), $context['delta']];
+    foreach ($filters as $id => $filter) {
+      if ($filter->widget === 'autocomplete' && ($element['options']['sift_terms']['filters'][$id]['ids']['#type'] ?? NULL) === 'entity_autocomplete') {
+        $group = &$element['options']['sift_terms']['filters'][$id];
+        $group['ids'] = SiftAutocompleteWidget::wrap($group['ids'], $filter, $widget_id, $items->getEntity(), $parents, $group['retained']['#value'] !== []);
+      }
+    }
   }
 
   /**

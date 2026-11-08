@@ -11,5 +11,6 @@ phpunit
 revisionable
 shivammathur
 simpletest
+tagify
 updb
 viewsreference

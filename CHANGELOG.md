@@ -7,6 +7,8 @@ Views Reference Sift follows [Semantic Versioning][semver].
 
 ### Added
 
+- Lets site builders choose a Sift autocomplete widget such as Tagify in
+  Manage form display.
 - Lets editors hide items matching any selected value when a supported Sift
   filter allows exclusion.
 - Adds an optional Drush command to preview and convert saved Views Reference
@@ -37,6 +39,8 @@ Views Reference Sift follows [Semantic Versioning][semver].
 
 ### Changed
 
+- Clarifies whether results match at least one selected item or every
+  selected item.
 - Uses radio buttons for single-value checkbox widgets, exposes required
   input states, and shows selection limits even when the default is used.
 - Clarifies which Sift values come from the field or browser and why
