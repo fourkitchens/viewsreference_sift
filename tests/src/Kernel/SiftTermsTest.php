@@ -1264,6 +1264,36 @@ class SiftTermsTest extends KernelTestBase {
   }
 
   /**
+   * Tests native autocomplete selections and rejects forged bundle IDs.
+   */
+  public function testNativeAutocompleteValidatesSelections(): void {
+    $node = $this->createListing([]);
+    $this->saveTermOptions(['label' => 'Topics'], ['tags']);
+    $this->useRestrictedEditor();
+    $plugin_id = 'entity_reference_autocomplete_tags';
+    [$form] = $this->preservedSelectionForm($node, [], autocomplete_widget: $plugin_id);
+    $ids = $form['listing']['widget'][0]['options']['sift_terms']['filters']['tid']['ids'];
+    $field_name = $ids['field']['widget']['#field_name'];
+    $this->assertFalse($ids['field']['widget']['target_id']['#validate_reference']);
+
+    $selection['filters']['tid']['ids'][$field_name]['target_id'] = 'A (' . $this->termIds['A'] . ')';
+    [$form, $state, $widget] = $this->preservedSelectionForm($node, $selection, autocomplete_widget: $plugin_id);
+    $this->assertEmpty($state->getErrors());
+    $this->assertSame($this->storedSelection('tid', [$this->termIds['A']]), $this->savePreservedSelection($node, $widget, $form, $state));
+
+    $selection['filters']['tid']['ids'][$field_name]['target_id'] = 'C (' . $this->termIds['C'] . ')';
+    [, $state] = $this->preservedSelectionForm($node, $selection, autocomplete_widget: $plugin_id);
+    $this->assertContains('One or more of the selected items are unavailable.', array_map('strval', $state->getErrors()));
+    $state->clearErrors();
+
+    $fallback = ['filters' => ['tid' => ['ids' => 'B (' . $this->termIds['B'] . ')']]];
+    [$form, $state, $widget] = $this->preservedSelectionForm($node, $fallback, autocomplete_widget: 'unavailable_widget');
+    $this->assertSame('entity_autocomplete', $form['listing']['widget'][0]['options']['sift_terms']['filters']['tid']['ids']['#type']);
+    $this->assertEmpty($state->getErrors());
+    $this->assertSame($this->storedSelection('tid', [$this->termIds['B']]), $this->savePreservedSelection($node, $widget, $form, $state));
+  }
+
+  /**
    * Tests that forged serialized defaults cannot introduce retained IDs.
    */
   public function testForgedSerializedDefaultsCannotAddSelections(): void {
@@ -1384,7 +1414,7 @@ class SiftTermsTest extends KernelTestBase {
    * @phpstan-param array<string, mixed> $selection
    * @phpstan-return array{array<array-key, mixed>, FormStateInterface, WidgetInterface}
    */
-  private function preservedSelectionForm(NodeInterface $node, array $selection, ?string $forged_data = NULL, ?FormStateInterface $state = NULL, string $display = 'embed_terms'): array {
+  private function preservedSelectionForm(NodeInterface $node, array $selection, ?string $forged_data = NULL, ?FormStateInterface $state = NULL, string $display = 'embed_terms', string $autocomplete_widget = ''): array {
     $items = $node->get('field_listing');
     $definition = $items->getFieldDefinition();
     $this->assertInstanceOf(FieldConfig::class, $definition);
@@ -1395,6 +1425,9 @@ class SiftTermsTest extends KernelTestBase {
       'configuration' => ['type' => 'viewsreference_select'],
     ]);
     $this->assertInstanceOf(WidgetInterface::class, $widget);
+    if ($autocomplete_widget !== '') {
+      $widget->setThirdPartySetting('viewsreference_sift', 'autocomplete_widget', $autocomplete_widget);
+    }
     $rebuild = $state !== NULL || $forged_data !== NULL;
     $state ??= new FormState();
     $state->setValues([])->setValidationComplete(FALSE);

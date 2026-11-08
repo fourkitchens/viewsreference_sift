@@ -78,6 +78,12 @@ without changing the stability setting for the whole site.
    content type.
 1. Edit the field settings. Allow the View and display type you plan to use
    and enable **Sift filters**.
+1. To use another autocomplete widget, open **Manage form display** and edit
+   the Views Reference field's widget settings. Choose **Sift autocomplete
+   widget**, then update the widget settings and save the form display. For
+   example, enable [Tagify][tagify] and select **Tagify** here. The choice
+   applies to filters set to **Autocomplete** in Views and uses the widget's
+   defaults.
 1. Edit a content item and select the View and display. Open **Options** and
    use **Filter this list** to select items. Choose a match mode if offered.
    Save the content item.
@@ -85,6 +91,11 @@ without changing the stability setting for the whole site.
 You can also enable Views Reference's **Argument** setting. Use it to fill
 other contextual filter positions. If both settings fill the same position,
 the Sift selection wins.
+
+Core autocomplete is the default and is used if the configured widget is
+unavailable for a filter. Compatible contributed widgets can opt in by setting
+`viewsreference_sift` to `TRUE` in `hook_field_widget_info_alter()`. The widget
+must support multiple entity references and work without a stored field.
 
 
 ### View
@@ -131,8 +142,9 @@ each filter, apply the changes, and save the View.
   filter has built-in help.
 - **Allowed bundles** narrows the validator's list when it specifies two or
   more bundles. The default uses all bundles the validator allows.
-- **Match** lets the editor choose Any or All by default. You can also
-  require Any or All on filters that support both modes.
+- **Match** lets the editor choose whether each result must match at least
+  one selected item (OR) or every selected item (AND). You can also fix the
+  behavior on filters that support both modes.
 - **Allow exclusion** lets editors choose **Hide items that match**.
   Hiding items always matches Any: an article tagged A and B is hidden
   when the editor excludes A. This option is off by default and is
@@ -347,6 +359,7 @@ development and [SECURITY.md] for private reports.
 [issues]: https://github.com/fourkitchens/viewsreference_sift/issues
 [exposed]: https://www.drupal.org/project/viewsreference_filter
 [viewsreference]: https://www.drupal.org/project/viewsreference
+[tagify]: https://www.drupal.org/project/tagify
 [drush]: https://www.drush.org/13.x/
 [inline-errors]: https://www.drupal.org/docs/8/core/modules/inline-form-errors
 [drupal-12]: https://www.drupal.org/project/viewsreference/issues/3583101

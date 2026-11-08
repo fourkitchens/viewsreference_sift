@@ -6,6 +6,7 @@ namespace Drupal\Tests\viewsreference_sift\FunctionalJavascript;
 
 // cspell:ignore Behat
 use Behat\Mink\Element\NodeElement;
+use Drupal\Core\Entity\Display\EntityFormDisplayInterface;
 use Drupal\field\Entity\FieldConfig;
 use Drupal\field\Entity\FieldStorageConfig;
 use Drupal\FunctionalJavascriptTests\DrupalSelenium2Driver;
@@ -36,7 +37,7 @@ class SiftWidgetTest extends WebDriverTestBase {
   /**
    * {@inheritdoc}
    */
-  protected static $modules = ['inline_form_errors', 'node', 'taxonomy', 'viewsreference_sift'];
+  protected static $modules = ['field_ui', 'inline_form_errors', 'node', 'taxonomy', 'viewsreference_sift'];
 
   /**
    * {@inheritdoc}
@@ -134,7 +135,7 @@ class SiftWidgetTest extends WebDriverTestBase {
     $this->openOptions();
     $this->chooseTag('tid', 'Alpha topic');
     $this->chooseTag('tid', 'Beta topic');
-    $assert->fieldExists('All of these items')->click();
+    $assert->fieldExists('Match every selected item')->click();
     $this->submitForm([], 'Save');
     $assert->statusMessageContains('has been updated.', 'status');
     $saved = $this->savedListing($article);
@@ -153,6 +154,63 @@ class SiftWidgetTest extends WebDriverTestBase {
     $assert->pageTextContains('Story tagged with both topics');
     $assert->pageTextNotContains('Story tagged with alpha only');
     $assert->pageTextNotContains('Story tagged with beta only');
+    $assert->pageTextNotContains('Story without topics');
+  }
+
+  /**
+   * Tests choosing and using a Sift autocomplete widget on the form display.
+   */
+  public function testConfiguredAutocompleteWidget(): void {
+    $plugin_id = 'entity_reference_autocomplete_tags';
+    $this->drupalLogin($this->drupalCreateUser(['administer node form display']));
+    $this->drupalGet('admin/structure/types/manage/article/form-display');
+    $assert = $this->assertSession();
+    $assert->elementExists('css', 'input[name="field_listing_settings_edit"]')->click();
+    $assert->assertWaitOnAjaxRequest();
+    $setting = $assert->fieldExists('Sift autocomplete widget');
+    $this->assertSame('', $setting->getValue());
+    $setting->selectOption($plugin_id);
+    $assert->buttonExists('Update')->click();
+    $assert->assertWaitOnAjaxRequest();
+    $this->submitForm([], 'Save');
+
+    $display = $this->container->get('entity_type.manager')->getStorage('entity_form_display')->loadUnchanged('node.article.default');
+    $this->assertInstanceOf(EntityFormDisplayInterface::class, $display);
+    $component = $display->getComponent('field_listing');
+    $this->assertSame($plugin_id, $component['third_party_settings']['viewsreference_sift']['autocomplete_widget']);
+
+    $alpha = Term::create(['vid' => 'tags', 'name' => 'Alpha topic']);
+    $alpha->save();
+    $this->drupalCreateNode(['type' => 'article', 'title' => 'Story tagged with alpha', 'field_tags' => [$alpha->id()]]);
+    $this->drupalCreateNode(['type' => 'article', 'title' => 'Story without topics']);
+    $article = $this->drupalCreateNode([
+      'type' => 'article',
+      'title' => 'Editor listing',
+      'field_listing' => [
+        'target_id' => 'viewsreference_sift_test',
+        'display_id' => 'embed_plain',
+      ],
+    ]);
+    $this->drupalLogin($this->drupalCreateUser(['access content', 'edit any article content']));
+    $this->drupalGet($article->toUrl('edit-form'));
+    $selector = '.field--widget-entity-reference-autocomplete-tags input.form-autocomplete';
+    $assert->elementNotExists('css', $selector);
+    $this->selectDisplay('embed_terms');
+    $this->openOptions();
+    $this->chooseAutocompleteValue($assert->elementExists('css', $selector), 'Alpha topic');
+    $this->submitForm([], 'Save');
+    $assert->statusMessageContains('has been updated.', 'status');
+    $this->assertSame([
+      'version' => 2,
+      'filters' => ['tid' => ['ids' => [(int) $alpha->id()], 'match' => 'any']],
+    ], $this->savedListing($article)['settings']['sift_terms']);
+
+    $this->drupalGet($article->toUrl('edit-form'));
+    $this->openOptions();
+    $this->assertSame('Alpha topic (' . $alpha->id() . ')', $assert->elementExists('css', $selector)->getValue());
+
+    $this->drupalGet($article->toUrl());
+    $assert->pageTextContains('Story tagged with alpha');
     $assert->pageTextNotContains('Story without topics');
   }
 
@@ -203,6 +261,8 @@ class SiftWidgetTest extends WebDriverTestBase {
     $this->assertCount(2, $match->findAll('css', 'input[type="radio"]'));
     $any = $assert->elementExists('css', 'input[value="any"]', $match);
     $all = $assert->elementExists('css', 'input[value="all"]', $match);
+    $this->assertSame('Match at least one selected item', $assert->elementExists('css', 'label[for="' . $any->getAttribute('id') . '"]', $match)->getText());
+    $this->assertSame('Match every selected item', $assert->elementExists('css', 'label[for="' . $all->getAttribute('id') . '"]', $match)->getText());
     $this->assertTrue($any->isChecked());
     $this->sendKeys($any, Key::DOWN_ARROW);
     $this->assertTrue($all->isChecked());
@@ -326,13 +386,20 @@ class SiftWidgetTest extends WebDriverTestBase {
    * Selects a tag from the autocomplete results.
    */
   private function chooseTag(string $filter, string $tag): void {
+    $input = $this->assertSession()->fieldExists(self::SIFT . '[filters][' . $filter . '][ids]');
+    $this->chooseAutocompleteValue($input, $tag);
+  }
+
+  /**
+   * Selects a suggested value using the keyboard.
+   */
+  private function chooseAutocompleteValue(NodeElement $input, string $value): void {
     $assert = $this->assertSession();
-    $input = $assert->fieldExists(self::SIFT . '[filters][' . $filter . '][ids]');
     $existing = (string) $input->getValue();
-    $this->sendKeys($input, Key::END . ($existing === '' ? '' : ', ') . $tag);
+    $this->sendKeys($input, Key::END . ($existing === '' ? '' : ', ') . $value);
     $result = $assert->waitOnAutocomplete();
     $this->assertNotNull($result);
-    $this->assertSame($tag, $result->getText());
+    $this->assertSame($value, $result->getText());
     $this->sendKeys($input, Key::DOWN_ARROW . Key::ENTER);
     $assert->assertWaitOnAjaxRequest();
   }

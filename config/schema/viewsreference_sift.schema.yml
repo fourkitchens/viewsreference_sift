@@ -1,3 +1,11 @@
+field.widget.third_party.viewsreference_sift:
+  type: mapping
+  label: 'Views Reference Sift widget settings'
+  mapping:
+    autocomplete_widget:
+      type: string
+      label: 'Sift autocomplete widget'
+
 views.display_extender.viewsreference_sift:
   type: views_display_extender
   label: 'Views Reference Sift settings'
