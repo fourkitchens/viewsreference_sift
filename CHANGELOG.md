@@ -5,6 +5,8 @@ Views Reference Sift follows [Semantic Versioning][semver].
 
 ## [Unreleased]
 
+## [1.0.0-beta4] - 2026-11-09
+
 ### Added
 
 - Lets site builders choose a Sift autocomplete widget such as Tagify in
@@ -155,7 +157,8 @@ Views Reference Sift follows [Semantic Versioning][semver].
 
 [keep-a-changelog]: https://keepachangelog.com/en/1.1.0/
 [semver]: https://semver.org/spec/v2.0.0.html
-[Unreleased]: https://github.com/fourkitchens/viewsreference_sift/compare/1.0.0-beta3...HEAD
+[Unreleased]: https://github.com/fourkitchens/viewsreference_sift/compare/1.0.0-beta4...HEAD
+[1.0.0-beta4]: https://github.com/fourkitchens/viewsreference_sift/compare/1.0.0-beta3...1.0.0-beta4
 [1.0.0-beta3]: https://github.com/fourkitchens/viewsreference_sift/compare/1.0.0-beta2...1.0.0-beta3
 [1.0.0-beta2]: https://github.com/fourkitchens/viewsreference_sift/compare/1.0.0-beta1...1.0.0-beta2
 [1.0.0-beta1]: https://github.com/fourkitchens/viewsreference_sift/releases/tag/1.0.0-beta1
